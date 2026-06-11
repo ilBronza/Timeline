@@ -1,0 +1,36 @@
+{
+    "name": "ilbronza/timeline",
+    "description": "Gantt / timeline visualization components (vis-timeline) for Laravel and IlBronza packages",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Davide Bronzini",
+            "email": "davide@sistema.srl",
+            "homepage": "https://www.sistema.srl"
+        }
+    ],
+    "homepage": "https://github.com/ilbronza/timeline",
+    "keywords": ["Laravel", "Timeline", "Gantt", "vis-timeline"],
+    "require": {
+        "php": "^8.1"
+    },
+    "require-dev": {
+    },
+    "autoload": {
+        "psr-4": {
+            "IlBronza\\Timeline\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "IlBronza\\Timeline\\Tests\\": "tests"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "IlBronza\\Timeline\\TimelineServiceProvider"
+            ]
+        }
+    }
+}

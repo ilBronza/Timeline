@@ -1,0 +1,22 @@
+<?php
+
+namespace IlBronza\Timeline\Traits;
+
+use IlBronza\Buttons\Button;
+
+trait GanttTimelineTrait
+{
+	public function getGanttButton() : Button
+	{
+		return Button::create([
+			'href' => $this->getGanttUrl(),
+			'text' => 'crud::fields.gantt',
+			'icon' => 'chart-gantt'
+		]);
+	}
+
+	public function getGanttUrl(?string $option = null) : string
+	{
+		return $this->getKeyedRoute('timelineContainer', ['option' => $option]);
+	}
+}
