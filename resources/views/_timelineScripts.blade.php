@@ -30,12 +30,14 @@
 <script type="text/javascript">
 
     window.timelineDefaultTitle = 'N.D.';
+    window.possibleSellables = [];
 
     window.timelineLinkIframe = function(link)
     {
         const faIcon = link.faIcon ?? 'link';
         const textString = link.text ? link.text : '';
-        const titleString = link.text ? ' title="${link.text}"' : '';
+        const label = link.title ?? link.text ?? '';
+        const titleString = label ? ` title="${label}"` : '';
         const marginClass = link.text ? ' uk-margin-left ' : '';
         const classString = "uk-button uk-button-default uk-button-small";
         const extraClasses = Array.isArray(link.htmlClasses) ? ' ' + link.htmlClasses.join(' ') : '';
@@ -45,6 +47,45 @@
         ${textString}<i class="fa fa-${faIcon}"></i>
     </a>
 </div>`;
+    }
+
+    window.createTimelineIframeLinkElement = function(link)
+    {
+        const template = document.createElement('template');
+        template.innerHTML = window.timelineLinkIframe(link).trim();
+
+        const wrapper = template.content.firstElementChild;
+        const anchor = wrapper.querySelector('a');
+
+        if (anchor)
+        {
+            anchor.addEventListener('click', function(e)
+            {
+                e.preventDefault();
+                e.stopPropagation();
+
+                clearTimeout(liveItemHideTimer);
+
+                if (typeof UIkit !== 'undefined' && UIkit.lightboxPanel)
+                {
+                    UIkit.lightboxPanel({
+                        items: [
+                            {
+                                source: link.url,
+                                type: 'iframe',
+                            },
+                        ],
+                    }).show();
+                }
+            });
+        }
+
+        return wrapper;
+    }
+
+    window.isTimelineLightboxOpen = function()
+    {
+        return document.querySelector('.uk-lightbox.uk-open') !== null;
     }
 
     window.timelineLinkTarget = function(link, target)
@@ -175,7 +216,16 @@
 
     const API_URL = "{{ $apiEndpoint }}";
     const UPDATE_URL = "{{ $timelineUpdateRoute ?? '' }}";
+    const POSSIBLE_SELLABLES_URL = "{{ $possibleSellablesEndpoint ?? '' }}";
+    const STORE_TIMELINE_ROW_URL = "{{ $timelineStoreRowEndpoint ?? '' }}";
     const TIMELINE_ZOOM_DAYS = {{ $zoom ?? config('timeline.zoom', 14) }};
+
+    async function fetchJSON(url)
+    {
+        const res = await fetch(url, {headers: {'Accept': 'application/json'}});
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' on ' + url);
+        return await res.json();
+    }
 
     // DOM element where the Timeline will be attached
     var container = document.getElementById('timelinecontainer');
@@ -202,73 +252,90 @@
                 const contentEl = itemEl.closest('.vis-item')?.querySelector('.vis-item-content');
                 if (!contentEl) return;
 
+                if (!itemEl.dataset.itemId) return;
+
+                const changeSupplierUrl = itemEl.dataset.changeSupplierUrl || null;
                 const rect = contentEl.getBoundingClientRect();
                 const initialOffsetX = ev.clientX - rect.left;
 
                 liveItemTimer = setTimeout(function()
                 {
-                    if (contentEl.querySelector('.timeline-live-inline')) return;
+                    if (contentEl.querySelector('.timeline-live-inline-group')) return;
 
-                    const btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.className = 'uk-button uk-button-danger uk-button-small timeline-live-inline';
-                    btn.innerHTML = '<i class="fa fa-link"></i>';
+                    const group = document.createElement('div');
+                    group.className = 'timeline-live-inline-group';
+                    group.style.position = 'absolute';
+                    group.style.zIndex = '30';
+                    group.style.pointerEvents = 'auto';
+                    group.style.display = 'flex';
+                    group.style.gap = '4px';
 
-                    if (!itemEl.dataset.itemId) return;
-                    btn.dataset.itemId = itemEl.dataset.itemId;
+                    const linkBtn = document.createElement('button');
+                    linkBtn.type = 'button';
+                    linkBtn.className = 'uk-button uk-button-danger uk-button-small timeline-live-inline';
+                    linkBtn.innerHTML = '<i class="fa fa-link"></i>';
+                    linkBtn.dataset.itemId = itemEl.dataset.itemId;
 
-                    btn.style.position = 'absolute';
-                    btn.style.zIndex = '30';
-                    btn.style.pointerEvents = 'auto';
-
-                    btn.onclick = function(e)
+                    linkBtn.onclick = function(e)
                     {
                         e.stopPropagation();
-                        window.openTimelineItemLinksModal(btn);
+                        window.openTimelineItemLinksModal(linkBtn);
                     };
 
-                    btn.onmousedown = function(e){ e.stopPropagation(); };
-                    btn.onpointerdown = function(e){ e.stopPropagation(); };
+                    linkBtn.onmousedown = function(e){ e.stopPropagation(); };
+                    linkBtn.onpointerdown = function(e){ e.stopPropagation(); };
 
-                    // prevent flicker when hovering the button itself
-                    btn.addEventListener('pointerenter', function()
+                    group.appendChild(linkBtn);
+
+                    if (changeSupplierUrl)
+                    {
+                        const shuffleWrapper = window.createTimelineIframeLinkElement({
+                            url: changeSupplierUrl,
+                            faIcon: 'shuffle',
+                            title: 'Cambia fornitore',
+                        });
+
+                        shuffleWrapper.classList.add('timeline-live-inline');
+                        group.appendChild(shuffleWrapper);
+                    }
+
+                    group.addEventListener('pointerenter', function()
                     {
                         clearTimeout(liveItemHideTimer);
                     });
 
-                    btn.addEventListener('pointerleave', function()
+                    group.addEventListener('pointerleave', function()
                     {
                         clearTimeout(liveItemHideTimer);
 
                         liveItemHideTimer = setTimeout(function()
                         {
-                            if (btn)
-                                btn.remove();
+                            if (window.isTimelineLightboxOpen())
+                                return;
+
+                            if (group.parentNode)
+                                group.remove();
                         }, 700);
                     });
 
-                    // ensure positioning context
                     if (getComputedStyle(contentEl).position === 'static')
                         contentEl.style.position = 'relative';
 
-                    contentEl.appendChild(btn);
+                    contentEl.appendChild(group);
 
-                    // position once based on cursor X inside vis-item-content, clamped to visible width
                     const contentWidth = contentEl.offsetWidth;
-                    const btnWidth = 28; // approx width for small uk-button with icon
+                    const btnWidth = changeSupplierUrl ? 60 : 28;
 
                     let computedLeft = initialOffsetX + 10;
 
-                    // prevent overflow on the right
                     if (computedLeft + btnWidth > contentWidth)
                         computedLeft = contentWidth - btnWidth - 4;
 
-                    // prevent negative overflow on the left
                     if (computedLeft < 2)
                         computedLeft = 2;
 
-                    btn.style.left = computedLeft + 'px';
-                    btn.style.top = '2px';
+                    group.style.left = computedLeft + 'px';
+                    group.style.top = '2px';
 
                 }, 250);
             });
@@ -277,19 +344,21 @@
                 const contentEl = itemEl.closest('.vis-item')?.querySelector('.vis-item-content');
                 if (!contentEl) return;
 
-                const btn = contentEl.querySelector('.timeline-live-inline');
+                const group = contentEl.querySelector('.timeline-live-inline-group');
 
-                // if moving toward the button, do not trigger hide
-                if (btn && e.relatedTarget && btn.contains(e.relatedTarget))
+                if (group && e.relatedTarget && group.contains(e.relatedTarget))
                     return;
 
                 clearTimeout(liveItemHideTimer);
 
                 liveItemHideTimer = setTimeout(function()
                 {
-                    const currentBtn = contentEl.querySelector('.timeline-live-inline');
-                    if (currentBtn)
-                        currentBtn.remove();
+                    if (window.isTimelineLightboxOpen())
+                        return;
+
+                    const currentGroup = contentEl.querySelector('.timeline-live-inline-group');
+                    if (currentGroup)
+                        currentGroup.remove();
                 }, 700);
             });
         });
@@ -349,6 +418,323 @@ window.onTimelineEndResize = function (item)
         }
     })
     .catch(console.error);
+};
+
+window.loadPossibleSellables = async function ()
+{
+    if (!POSSIBLE_SELLABLES_URL)
+    {
+        window.possibleSellables = [];
+
+        return;
+    }
+
+    const res = await fetch(POSSIBLE_SELLABLES_URL, {headers: {'Accept': 'application/json'}});
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' on ' + POSSIBLE_SELLABLES_URL);
+
+    const data = await res.json();
+
+    window.possibleSellables = Array.isArray(data.possibleSellables) ? data.possibleSellables : [];
+};
+
+window.escapeHtml = function (value)
+{
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+
+window.formatTimeInputValue = function (date)
+{
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return year + '-' + month + '-' + day + 'T' + hours + ':' + minutes;
+};
+
+window.parseTimeInputValue = function (value)
+{
+    const parts = String(value).split('T');
+    const dateParts = parts[0].split('-').map(Number);
+    const timeParts = parts[1].split(':').map(Number);
+
+    return new Date(dateParts[0], dateParts[1] - 1, dateParts[2], timeParts[0], timeParts[1], 0, 0);
+};
+
+window.parseVisDateTime = function (value)
+{
+    const parts = String(value).trim().split(/[\s:-]/);
+
+    return {
+        hours: parseInt(parts[3], 10),
+        minutes: parseInt(parts[4], 10) || 0,
+        seconds: parseInt(parts[5], 10) || 0,
+    };
+};
+
+window.isTimelineHiddenDate = function (date, hiddenDates)
+{
+    if (!Array.isArray(hiddenDates) || hiddenDates.length === 0)
+        return false;
+
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < hiddenDates.length; i++)
+    {
+        const hidden = hiddenDates[i];
+        const startParts = window.parseVisDateTime(hidden.start);
+        const endParts = window.parseVisDateTime(hidden.end);
+
+        const rangeStart = new Date(dayStart);
+        rangeStart.setHours(startParts.hours, startParts.minutes, startParts.seconds, 0);
+
+        const rangeEnd = new Date(dayStart);
+        if (endParts.hours === 24)
+            rangeEnd.setDate(rangeEnd.getDate() + 1);
+
+        rangeEnd.setHours(endParts.hours === 24 ? 0 : endParts.hours, endParts.minutes, endParts.seconds, 0);
+
+        if (date >= rangeStart && date < rangeEnd)
+            return true;
+    }
+
+    return false;
+};
+
+window.getTimelineVisibleWindowMs = function ()
+{
+    const windowRange = window.timeline.getWindow();
+
+    return windowRange.end.getTime() - windowRange.start.getTime();
+};
+
+window.getTimelineSchedulingRules = function ()
+{
+    return {
+        hiddenDates: options.hiddenDates || [],
+        timeAxis: options.timeAxis || {scale: 'hour', step: 4},
+    };
+};
+
+window.snapTimelineCreateDatetime = function (clickDate)
+{
+    const schedulingRules = window.getTimelineSchedulingRules();
+    const hiddenDates = schedulingRules.hiddenDates;
+    const timeAxis = schedulingRules.timeAxis;
+    const step = timeAxis.step || 1;
+    const scale = timeAxis.scale || 'hour';
+    const click = new Date(clickDate.getTime());
+
+    click.setSeconds(0, 0);
+    click.setMilliseconds(0);
+
+    let candidate = new Date(click.getTime());
+
+    if (scale === 'hour')
+    {
+        candidate.setMinutes(0);
+        candidate.setHours(Math.floor(candidate.getHours() / step) * step);
+
+        while (candidate >= click || window.isTimelineHiddenDate(candidate, hiddenDates))
+            candidate.setHours(candidate.getHours() - step);
+    }
+    else if (scale === 'day')
+    {
+        candidate.setHours(8, 0, 0, 0);
+
+        if (candidate >= click)
+            candidate.setDate(candidate.getDate() - step);
+
+        while (candidate >= click || window.isTimelineHiddenDate(candidate, hiddenDates))
+        {
+            candidate.setDate(candidate.getDate() - step);
+            candidate.setHours(8, 0, 0, 0);
+        }
+    }
+    else if (scale === 'month')
+    {
+        candidate.setDate(1);
+        candidate.setHours(8, 0, 0, 0);
+
+        if (candidate >= click)
+            candidate.setMonth(candidate.getMonth() - step);
+
+        while (candidate >= click || window.isTimelineHiddenDate(candidate, hiddenDates))
+        {
+            candidate.setMonth(candidate.getMonth() - step);
+            candidate.setHours(8, 0, 0, 0);
+        }
+    }
+    else if (scale === 'year')
+    {
+        candidate.setMonth(0, 1);
+        candidate.setHours(8, 0, 0, 0);
+
+        if (candidate >= click)
+            candidate.setFullYear(candidate.getFullYear() - step);
+
+        while (candidate >= click || window.isTimelineHiddenDate(candidate, hiddenDates))
+        {
+            candidate.setFullYear(candidate.getFullYear() - step);
+            candidate.setHours(8, 0, 0, 0);
+        }
+    }
+
+    return candidate;
+};
+
+window.getTimelineCreateEndDatetime = function (startDate)
+{
+    return new Date(startDate.getTime() + (window.getTimelineVisibleWindowMs() * 0.20));
+};
+
+window.openTimelineCreateRowPopup = async function (datetime, sellableId)
+{
+    if (!STORE_TIMELINE_ROW_URL)
+    {
+        if (typeof window.addDangerNotification === 'function')
+            window.addDangerNotification('Store endpoint timeline non configurato');
+
+        return;
+    }
+
+    await window.loadPossibleSellables();
+
+    const template = document.getElementById('timeline-item-modal-template');
+    if (!template)
+        return;
+
+    const clone = template.firstElementChild.cloneNode(true);
+    const modalId = 'timeline-create-modal-' + Date.now();
+    clone.id = modalId;
+
+    const modalTitleEl = clone.querySelector('.uk-modal-title');
+    const modalContent = clone.querySelector('.timeline-modal-content');
+    const footer = clone.querySelector('.uk-card-footer');
+
+    if (footer)
+        footer.remove();
+
+    const selectedSellable = sellableId
+        ? window.possibleSellables.find(function (sellable) { return String(sellable.id) === String(sellableId); })
+        : null;
+
+    modalTitleEl.textContent = selectedSellable
+        ? 'Nuova riga timeline — ' + selectedSellable.name
+        : 'Nuova riga timeline';
+
+    const startDatetime = window.snapTimelineCreateDatetime(datetime);
+    const endDatetime = window.getTimelineCreateEndDatetime(startDatetime);
+    const defaultStartValue = window.formatTimeInputValue(startDatetime);
+    const defaultEndValue = window.formatTimeInputValue(endDatetime);
+    const sellablesOptions = window.possibleSellables.map(function (sellable) {
+        return `<option value="${window.escapeHtml(sellable.id)}">${window.escapeHtml(sellable.name)}</option>`;
+    }).join('');
+
+    modalContent.innerHTML = `
+        <form class="uk-form-stacked timeline-create-row-form">
+            <div class="uk-margin">
+                <label class="uk-form-label" for="timeline-create-starts-at">Inizio</label>
+                <div class="uk-form-controls">
+                    <input id="timeline-create-starts-at" class="uk-input" type="datetime-local" name="starts_at" value="${defaultStartValue}" required>
+                </div>
+            </div>
+            <div class="uk-margin">
+                <label class="uk-form-label" for="timeline-create-ends-at">Fine</label>
+                <div class="uk-form-controls">
+                    <input id="timeline-create-ends-at" class="uk-input" type="datetime-local" name="ends_at" value="${defaultEndValue}" required>
+                </div>
+            </div>
+            <div class="uk-margin">
+                <label class="uk-form-label" for="timeline-create-sellable">Sellable</label>
+                <div class="uk-form-controls">
+                    <select id="timeline-create-sellable" class="uk-select" name="sellable_id" required>
+                        <option value="">Seleziona sellable</option>
+                        ${sellablesOptions}
+                    </select>
+                </div>
+            </div>
+            <div class="uk-margin uk-text-right">
+                <button type="submit" class="uk-button uk-button-primary">Salva</button>
+            </div>
+        </form>
+    `;
+
+    document.body.appendChild(clone);
+
+    const modal = UIkit.modal('#' + modalId);
+    modal.show();
+
+    const form = clone.querySelector('.timeline-create-row-form');
+    const startsAtInput = clone.querySelector('#timeline-create-starts-at');
+    const sellableSelect = clone.querySelector('#timeline-create-sellable');
+
+    if (sellableSelect && selectedSellable)
+        sellableSelect.value = String(selectedSellable.id);
+
+    if (startsAtInput)
+        setTimeout(function () { startsAtInput.focus(); }, 0);
+
+    form.addEventListener('submit', async function (event)
+    {
+        event.preventDefault();
+
+        const formData = new FormData(form);
+        const payload = {
+            starts_at: window.parseTimeInputValue(formData.get('starts_at')).toISOString(),
+            ends_at: window.parseTimeInputValue(formData.get('ends_at')).toISOString(),
+            sellable_id: formData.get('sellable_id')
+        };
+
+        const saveButton = form.querySelector('button[type="submit"]');
+        if (saveButton)
+            saveButton.disabled = true;
+
+        try
+        {
+            const res = await fetch(STORE_TIMELINE_ROW_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || data.success !== true)
+                throw new Error(data.message || ('HTTP ' + res.status));
+
+            if (typeof window.addSuccessNotification === 'function')
+                window.addSuccessNotification(data.message || 'Riga creata');
+
+            modal.hide();
+            await window.fetchTimeline();
+        }
+        catch (error)
+        {
+            if (typeof window.addDangerNotification === 'function')
+                window.addDangerNotification(error.message || 'Errore durante il salvataggio');
+        }
+        finally
+        {
+            if (saveButton)
+                saveButton.disabled = false;
+        }
+    });
+
+    clone.addEventListener('hidden', function () {
+        modal.$destroy(true);
+        clone.remove();
+    });
 };
 
 var options = {
@@ -449,9 +835,15 @@ var options = {
 
                 const tooltip = item.popupTitle ? ` uk-tooltip="${item.popupTitle}"` : '';
 
+            const changeSupplierLink = Array.isArray(item.links)
+                ? item.links.find(function (link) { return link.faIcon === 'shuffle'; })
+                : null;
+
+            if (changeSupplierLink?.url)
+                wrapper.dataset.changeSupplierUrl = changeSupplierLink.url;
+
             wrapper.innerHTML = `
                 <strong ${tooltip}>${item.title}</strong>
-
             `;
 
             // If title was missing, mark first button as danger
@@ -604,12 +996,10 @@ var options = {
 
     };
 
-    async function fetchJSON(url)
-    {
-        const res = await fetch(url, {headers: {'Accept': 'application/json'}});
-        if (!res.ok) throw new Error('HTTP ' + res.status + ' on ' + url);
-        return await res.json();
-    }
+    window.timelineTimeAxis = {
+        scale: options.timeAxis.scale,
+        step: options.timeAxis.step,
+    };
 
     function addWeekendBackgrounds(timeline, items) {
 
@@ -669,6 +1059,8 @@ var options = {
 
     window.setTimelineData = function (data)
     {
+        const currentWindow = timeline ? timeline.getWindow() : null;
+
         if (data.groups)
         {
             groups.clear();
@@ -704,6 +1096,21 @@ var options = {
             var timelineOptions = Object.assign({}, options, { start: windowStart, end: windowEnd });
             timeline = new vis.Timeline(container, items, groups, timelineOptions);
 
+            timeline.on('doubleClick', function (properties)
+            {
+                if (properties && properties.item)
+                    return;
+
+                if (!properties || !properties.time)
+                    return;
+
+                window.openTimelineCreateRowPopup(new Date(properties.time), properties.group).catch(function (error)
+                {
+                    if (typeof window.addDangerNotification === 'function')
+                        window.addDangerNotification(error.message || 'Errore apertura popup timeline');
+                });
+            });
+
             addWeekendBackgrounds(timeline, items);
 
             timeline.on('rangechanged', function (props)
@@ -737,8 +1144,9 @@ var options = {
                     // - extreme: years
                     if (daysPerPixel > 1) {
                         // extreme zoomed out: show years
+                        window.timelineTimeAxis = { scale: 'year', step: 1 };
                         timeline.setOptions({
-                            timeAxis: { scale: 'year', step: 1 },
+                            timeAxis: window.timelineTimeAxis,
                             format: {
                                 minorLabels: { year: 'YY' },
                                 majorLabels: { year: 'YYYY' }
@@ -746,8 +1154,9 @@ var options = {
                         });
                     } else if (daysPerPixel > 0.35) {
                         // zoomed out: show months (abbreviated)
+                        window.timelineTimeAxis = { scale: 'month', step: 1 };
                         timeline.setOptions({
-                            timeAxis: { scale: 'month', step: 1 },
+                            timeAxis: window.timelineTimeAxis,
                             format: {
                                 minorLabels: { month: 'MMM' },
                                 majorLabels: { month: 'MMM YY' }
@@ -755,8 +1164,9 @@ var options = {
                         });
                     } else if (daysPerPixel > 0.023) {
                         // more zoomed out: show weekly ticks (keeps weekday context without clutter)
+                        window.timelineTimeAxis = { scale: 'day', step: 7 };
                         timeline.setOptions({
-                            timeAxis: { scale: 'day', step: 7 },
+                            timeAxis: window.timelineTimeAxis,
                             format: {
                                 minorLabels: { day: 'ddd D' },
                                 majorLabels: { day: 'MMM YY' }
@@ -764,8 +1174,9 @@ var options = {
                         });
                     } else if (daysPerPixel > 0.012) {
                         // slight zoom out: show daily ticks (you still see weekdays)
+                        window.timelineTimeAxis = { scale: 'day', step: 1 };
                         timeline.setOptions({
-                            timeAxis: { scale: 'day', step: 1 },
+                            timeAxis: window.timelineTimeAxis,
                             format: {
                                 minorLabels: { day: 'ddd D' },
                                 majorLabels: { day: 'MMM YY' }
@@ -773,8 +1184,9 @@ var options = {
                         });
                     } else {
                         // zoomed in: show hours
+                        window.timelineTimeAxis = { scale: 'hour', step: 4 };
                         timeline.setOptions({
-                            timeAxis: { scale: 'hour', step: 4 },
+                            timeAxis: window.timelineTimeAxis,
                             format: {
                                 minorLabels: {
                                     minute: 'HH:mm',
@@ -789,6 +1201,10 @@ var options = {
                 }
             });
         }
+        else if (currentWindow)
+        {
+            timeline.setWindow(currentWindow.start, currentWindow.end, {animation: false});
+        }
     }
 
 
@@ -796,7 +1212,7 @@ var options = {
     window.loadTimelineData = async function ()
     {
         return await fetchJSON(API_URL);
-    }
+    };
 
     window.fetchTimeline = async function ()
     {
@@ -813,8 +1229,23 @@ var options = {
         {
             window.addDangerNotification('Failed to load data:', e);
         }
-    }
+    };
 
-    window.fetchTimeline();
+    ;(async function bootstrapTimeline()
+    {
+        try
+        {
+            await window.loadPossibleSellables();
+        }
+        catch (error)
+        {
+            console.error(error);
+
+            if (typeof window.addDangerNotification === 'function')
+                window.addDangerNotification(error.message || 'Errore caricamento sellables timeline');
+        }
+
+        await window.fetchTimeline();
+    })();
 
 </script>

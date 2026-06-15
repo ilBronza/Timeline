@@ -20,6 +20,16 @@ abstract class BaseTimelineController extends CRUD
 
 	abstract public function getEndpoint() : string;
 
+	public function getPossibleSellablesEndpoint() : ?string
+	{
+		return null;
+	}
+
+	public function getTimelineStoreRowEndpoint() : ?string
+	{
+		return null;
+	}
+
 	/*
 	 * Build the drag&drop update route using the configured updatable item class,
 	 * avoiding any hardcoded dependency on domain models.
@@ -42,6 +52,8 @@ abstract class BaseTimelineController extends CRUD
 	{
 		$apiEndpoint = $this->getEndpoint();
 		$timelineUpdateRoute = $this->getTimelineUpdateRoute();
+		$possibleSellablesEndpoint = $this->getPossibleSellablesEndpoint();
+		$timelineStoreRowEndpoint = $this->getTimelineStoreRowEndpoint();
 
 		$modelInstance = $this->getModel();
 
@@ -49,7 +61,7 @@ abstract class BaseTimelineController extends CRUD
 
 		$zoom = $this->zoom ?? config('timeline.zoom', 14);
 
-		return view('timeline::timeline', compact('apiEndpoint', 'timelineUpdateRoute', 'modelInstance', 'buttons', 'zoom'));
+		return view('timeline::timeline', compact('apiEndpoint', 'timelineUpdateRoute', 'possibleSellablesEndpoint', 'timelineStoreRowEndpoint', 'modelInstance', 'buttons', 'zoom'));
 	}
 
 	public function getOptionMethod(string $option) : string
