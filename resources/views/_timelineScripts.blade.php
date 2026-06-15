@@ -31,6 +31,8 @@
 
     window.timelineDefaultTitle = 'N.D.';
     window.possibleSellables = [];
+    window.possibleSuppliers = [];
+    window.possibleOrders = [];
 
     window.timelineLinkIframe = function(link)
     {
@@ -425,6 +427,8 @@ window.loadPossibleSellables = async function ()
     if (!POSSIBLE_SELLABLES_URL)
     {
         window.possibleSellables = [];
+        window.possibleSuppliers = [];
+        window.possibleOrders = [];
 
         return;
     }
@@ -435,6 +439,8 @@ window.loadPossibleSellables = async function ()
     const data = await res.json();
 
     window.possibleSellables = Array.isArray(data.possibleSellables) ? data.possibleSellables : [];
+    window.possibleSuppliers = Array.isArray(data.possibleSuppliers) ? data.possibleSuppliers : [];
+    window.possibleOrders = Array.isArray(data.possibleOrders) ? data.possibleOrders : [];
 };
 
 window.escapeHtml = function (value)
@@ -595,7 +601,7 @@ window.getTimelineCreateEndDatetime = function (startDate)
     return new Date(startDate.getTime() + (window.getTimelineVisibleWindowMs() * 0.20));
 };
 
-window.openTimelineCreateRowPopup = async function (datetime, sellableId)
+window.openTimelineCreateRowPopup = async function (datetime, groupId)
 {
     if (!STORE_TIMELINE_ROW_URL)
     {
@@ -622,13 +628,16 @@ window.openTimelineCreateRowPopup = async function (datetime, sellableId)
     if (footer)
         footer.remove();
 
-    const selectedSellable = sellableId
-        ? window.possibleSellables.find(function (sellable) { return String(sellable.id) === String(sellableId); })
+    const selectedSellable = groupId
+        ? window.possibleSellables.find(function (sellable) { return String(sellable.id) === String(groupId); })
+        : null;
+    const selectedSupplier = groupId
+        ? window.possibleSuppliers.find(function (supplier) { return String(supplier.id) === String(groupId); })
         : null;
 
     modalTitleEl.textContent = selectedSellable
         ? 'Nuova riga timeline — ' + selectedSellable.name
-        : 'Nuova riga timeline';
+        : (selectedSupplier ? 'Nuova riga timeline — ' + selectedSupplier.name : 'Nuova riga timeline');
 
     const startDatetime = window.snapTimelineCreateDatetime(datetime);
     const endDatetime = window.getTimelineCreateEndDatetime(startDatetime);
@@ -637,6 +646,45 @@ window.openTimelineCreateRowPopup = async function (datetime, sellableId)
     const sellablesOptions = window.possibleSellables.map(function (sellable) {
         return `<option value="${window.escapeHtml(sellable.id)}">${window.escapeHtml(sellable.name)}</option>`;
     }).join('');
+    const suppliersOptions = window.possibleSuppliers.map(function (supplier) {
+        return `<option value="${window.escapeHtml(supplier.id)}">${window.escapeHtml(supplier.name)}</option>`;
+    }).join('');
+    const sellableFieldHtml = window.possibleSellables.length
+        ? `<div class="uk-margin">
+                <label class="uk-form-label" for="timeline-create-sellable">Sellable</label>
+                <div class="uk-form-controls">
+                    <select id="timeline-create-sellable" class="uk-select" name="sellable_id" required>
+                        <option value="">Seleziona sellable</option>
+                        ${sellablesOptions}
+                    </select>
+                </div>
+            </div>`
+        : '';
+    const supplierFieldHtml = window.possibleSuppliers.length
+        ? `<div class="uk-margin">
+                <label class="uk-form-label" for="timeline-create-supplier">Fornitore</label>
+                <div class="uk-form-controls">
+                    <select id="timeline-create-supplier" class="uk-select" name="supplier_id" required>
+                        <option value="">Seleziona fornitore</option>
+                        ${suppliersOptions}
+                    </select>
+                </div>
+            </div>`
+        : '';
+    const ordersOptions = window.possibleOrders.map(function (order) {
+        return `<option value="${window.escapeHtml(order.id)}">${window.escapeHtml(order.name)}</option>`;
+    }).join('');
+    const orderFieldHtml = window.possibleOrders.length
+        ? `<div class="uk-margin">
+                <label class="uk-form-label" for="timeline-create-order">Commessa</label>
+                <div class="uk-form-controls">
+                    <select id="timeline-create-order" class="uk-select" name="order_id" required>
+                        <option value="">Seleziona commessa</option>
+                        ${ordersOptions}
+                    </select>
+                </div>
+            </div>`
+        : '';
 
     modalContent.innerHTML = `
         <form class="uk-form-stacked timeline-create-row-form">
@@ -652,15 +700,9 @@ window.openTimelineCreateRowPopup = async function (datetime, sellableId)
                     <input id="timeline-create-ends-at" class="uk-input" type="datetime-local" name="ends_at" value="${defaultEndValue}" required>
                 </div>
             </div>
-            <div class="uk-margin">
-                <label class="uk-form-label" for="timeline-create-sellable">Sellable</label>
-                <div class="uk-form-controls">
-                    <select id="timeline-create-sellable" class="uk-select" name="sellable_id" required>
-                        <option value="">Seleziona sellable</option>
-                        ${sellablesOptions}
-                    </select>
-                </div>
-            </div>
+            ${orderFieldHtml}
+            ${sellableFieldHtml}
+            ${supplierFieldHtml}
             <div class="uk-margin uk-text-right">
                 <button type="submit" class="uk-button uk-button-primary">Salva</button>
             </div>
@@ -675,9 +717,13 @@ window.openTimelineCreateRowPopup = async function (datetime, sellableId)
     const form = clone.querySelector('.timeline-create-row-form');
     const startsAtInput = clone.querySelector('#timeline-create-starts-at');
     const sellableSelect = clone.querySelector('#timeline-create-sellable');
+    const supplierSelect = clone.querySelector('#timeline-create-supplier');
 
     if (sellableSelect && selectedSellable)
         sellableSelect.value = String(selectedSellable.id);
+
+    if (supplierSelect && selectedSupplier)
+        supplierSelect.value = String(selectedSupplier.id);
 
     if (startsAtInput)
         setTimeout(function () { startsAtInput.focus(); }, 0);
@@ -690,8 +736,16 @@ window.openTimelineCreateRowPopup = async function (datetime, sellableId)
         const payload = {
             starts_at: window.parseTimeInputValue(formData.get('starts_at')).toISOString(),
             ends_at: window.parseTimeInputValue(formData.get('ends_at')).toISOString(),
-            sellable_id: formData.get('sellable_id')
         };
+
+        if (window.possibleSellables.length)
+            payload.sellable_id = formData.get('sellable_id');
+
+        if (window.possibleSuppliers.length)
+            payload.supplier_id = formData.get('supplier_id');
+
+        if (window.possibleOrders.length)
+            payload.order_id = formData.get('order_id');
 
         const saveButton = form.querySelector('button[type="submit"]');
         if (saveButton)
