@@ -221,6 +221,58 @@
     const POSSIBLE_SELLABLES_URL = "{{ $possibleSellablesEndpoint ?? '' }}";
     const STORE_TIMELINE_ROW_URL = "{{ $timelineStoreRowEndpoint ?? '' }}";
     const TIMELINE_ZOOM_DAYS = {{ $zoom ?? config('timeline.zoom', 14) }};
+    const TIMELINE_VIEW_STORAGE_KEY = [
+        'timeline-view',
+        window.location.origin,
+        window.location.pathname,
+        window.location.search
+    ].join(':');
+    let timelineViewStorageTimer = null;
+
+    function getStoredTimelineWindow()
+    {
+        try
+        {
+            const stored = window.localStorage.getItem(TIMELINE_VIEW_STORAGE_KEY);
+            if (! stored)
+                return null;
+
+            const parsed = JSON.parse(stored);
+            const start = new Date(parsed.start);
+            const end = new Date(parsed.end);
+
+            if (! Number.isFinite(start.getTime()) || ! Number.isFinite(end.getTime()) || end <= start)
+                return null;
+
+            return {start, end};
+        }
+        catch (error)
+        {
+            return null;
+        }
+    }
+
+    function storeTimelineWindow(start, end)
+    {
+        if (! start || ! end)
+            return;
+
+        clearTimeout(timelineViewStorageTimer);
+        timelineViewStorageTimer = setTimeout(function ()
+        {
+            try
+            {
+                window.localStorage.setItem(TIMELINE_VIEW_STORAGE_KEY, JSON.stringify({
+                    start: new Date(start).toISOString(),
+                    end: new Date(end).toISOString()
+                }));
+            }
+            catch (error)
+            {
+                // Ignore unavailable storage, private mode, or quota errors.
+            }
+        }, 250);
+    }
 
     async function fetchJSON(url)
     {
@@ -1132,10 +1184,16 @@ var options = {
         {
             // Calcola finestra iniziale PRIMA di creare la timeline (evita il fit automatico di vis.js)
             var zoomDays = typeof TIMELINE_ZOOM_DAYS !== 'undefined' ? TIMELINE_ZOOM_DAYS : 14;
+            var emptyTimelineZoomDays = 35;
             var zoomMs = zoomDays * 24 * 60 * 60 * 1000;
+            var emptyTimelineZoomMs = emptyTimelineZoomDays * 24 * 60 * 60 * 1000;
+            var storedWindow = getStoredTimelineWindow();
             var itemIds = items.getIds();
             var windowStart, windowEnd;
-            if (itemIds.length > 0) {
+            if (storedWindow) {
+                windowStart = storedWindow.start;
+                windowEnd = storedWindow.end;
+            } else if (itemIds.length > 0) {
                 var minStart = Infinity;
                 itemIds.forEach(function(id) {
                     var it = items.get(id);
@@ -1144,8 +1202,11 @@ var options = {
                 windowStart = new Date(minStart !== Infinity ? minStart : Date.now());
             } else {
                 windowStart = new Date();
+                windowEnd = new Date(windowStart.getTime() + emptyTimelineZoomMs);
             }
-            windowEnd = new Date(windowStart.getTime() + zoomMs);
+
+            if (! windowEnd)
+                windowEnd = new Date(windowStart.getTime() + zoomMs);
 
             var timelineOptions = Object.assign({}, options, { start: windowStart, end: windowEnd });
             timeline = new vis.Timeline(container, items, groups, timelineOptions);
@@ -1169,6 +1230,9 @@ var options = {
 
             timeline.on('rangechanged', function (props)
             {
+                if (props && props.start && props.end)
+                    storeTimelineWindow(props.start, props.end);
+
                 // wait a tick so vis.js has time to (re)render the axis labels
                 setTimeout(function () {
                     document
