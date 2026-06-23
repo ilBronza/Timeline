@@ -17,8 +17,8 @@ class TimelineGroup
 
 	public array $actions = [];
 
-	public function catchMeIfYouCan() : bool
+	public function catchMeIfYouCan() : mixed
 	{
-		return ! rand(0, 1);
+		return ! rand(0, 999);
 	}
 }
