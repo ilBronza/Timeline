@@ -29,4 +29,9 @@ class TimelineServiceProvider extends ServiceProvider
 			__DIR__ . '/../resources/views' => base_path('resources/views/vendor/timeline'),
 		], 'timeline.views');
 	}
+
+
+
+
+	//areo qua
 }
