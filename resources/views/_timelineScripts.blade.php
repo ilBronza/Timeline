@@ -503,18 +503,21 @@ window.onTimelineEndResize = function (item)
     if (! UPDATE_URL)
         return;
 
-    fetch(UPDATE_URL, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({_method: 'PUT', item: item})
-    })
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-        if (data.success === true && data.message && typeof window.addSuccessNotification === 'function') {
-            window.addSuccessNotification(data.message);
+    $.ajax({
+        url: UPDATE_URL,
+        type: 'POST',
+        contentType: 'application/json',
+        dataType: 'json',
+        data: JSON.stringify({ _method: 'PUT', item: item }),
+        success: function (data) {
+            if (data.success === true && data.message && typeof window.addSuccessNotification === 'function') {
+                window.addSuccessNotification(data.message);
+            }
+        },
+        error: function (xhr) {
+            console.error(xhr);
         }
-    })
-    .catch(console.error);
+    });
 };
 
 window.loadPossibleSellables = async function ()
