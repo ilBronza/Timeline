@@ -284,6 +284,25 @@
     // DOM element where the Timeline will be attached
     var container = document.getElementById('timelinecontainer');
 
+    if (container)
+    {
+        container.setAttribute('tabindex', '0');
+
+        container.addEventListener('pointerdown', function (event)
+        {
+            if (event.target.closest('a, button, input, select, textarea, [contenteditable="true"]'))
+                return;
+
+            container.focus({preventScroll: true});
+        });
+
+        container.addEventListener('focusout', function (event)
+        {
+            if (event.relatedTarget && container.contains(event.relatedTarget))
+                return;
+        });
+    }
+
     // Create a DataSet (allows two way data-binding)
     var items = new vis.DataSet([]);
     var groups = new vis.DataSet([]);
