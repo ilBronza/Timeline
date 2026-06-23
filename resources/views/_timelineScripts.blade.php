@@ -221,6 +221,9 @@
     const POSSIBLE_SELLABLES_URL = "{{ $possibleSellablesEndpoint ?? '' }}";
     const STORE_TIMELINE_ROW_URL = "{{ $timelineStoreRowEndpoint ?? '' }}";
     const TIMELINE_ZOOM_DAYS = {{ $zoom ?? config('timeline.zoom', 14) }};
+    const TIMELINE_DAY_MS = 24 * 60 * 60 * 1000;
+    const TIMELINE_MAX_ZOOM_MONTHS = 18;
+    const TIMELINE_MAX_ZOOM_MS = TIMELINE_MAX_ZOOM_MONTHS * (365.25 / 12) * TIMELINE_DAY_MS;
     const TIMELINE_VIEW_STORAGE_KEY = [
         'timeline-view',
         window.location.origin,
@@ -228,6 +231,27 @@
         window.location.search
     ].join(':');
     let timelineViewStorageTimer = null;
+
+    function clampTimelineWindowToMaxZoom(start, end)
+    {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+
+        if (! Number.isFinite(startDate.getTime()) || ! Number.isFinite(endDate.getTime()) || endDate <= startDate)
+            return null;
+
+        const windowMs = endDate.getTime() - startDate.getTime();
+        if (windowMs <= TIMELINE_MAX_ZOOM_MS)
+            return {start: startDate, end: endDate};
+
+        const middle = startDate.getTime() + (windowMs / 2);
+        const halfMaxZoom = TIMELINE_MAX_ZOOM_MS / 2;
+
+        return {
+            start: new Date(middle - halfMaxZoom),
+            end: new Date(middle + halfMaxZoom)
+        };
+    }
 
     function getStoredTimelineWindow()
     {
@@ -244,7 +268,7 @@
             if (! Number.isFinite(start.getTime()) || ! Number.isFinite(end.getTime()) || end <= start)
                 return null;
 
-            return {start, end};
+            return clampTimelineWindowToMaxZoom(start, end);
         }
         catch (error)
         {
@@ -865,6 +889,7 @@ window.openTimelineCreateRowPopup = async function (datetime, groupId)
 var options = {
     stack: true,
     showTooltips: false,
+    zoomMax: TIMELINE_MAX_ZOOM_MS,
 
         locale: 'it',
         format: {
@@ -1204,8 +1229,8 @@ var options = {
             // Calcola finestra iniziale PRIMA di creare la timeline (evita il fit automatico di vis.js)
             var zoomDays = typeof TIMELINE_ZOOM_DAYS !== 'undefined' ? TIMELINE_ZOOM_DAYS : 14;
             var emptyTimelineZoomDays = 35;
-            var zoomMs = zoomDays * 24 * 60 * 60 * 1000;
-            var emptyTimelineZoomMs = emptyTimelineZoomDays * 24 * 60 * 60 * 1000;
+            var zoomMs = Math.min(zoomDays * TIMELINE_DAY_MS, TIMELINE_MAX_ZOOM_MS);
+            var emptyTimelineZoomMs = Math.min(emptyTimelineZoomDays * TIMELINE_DAY_MS, TIMELINE_MAX_ZOOM_MS);
             var storedWindow = getStoredTimelineWindow();
             var itemIds = items.getIds();
             var windowStart, windowEnd;
@@ -1226,6 +1251,12 @@ var options = {
 
             if (! windowEnd)
                 windowEnd = new Date(windowStart.getTime() + zoomMs);
+
+            var clampedWindow = clampTimelineWindowToMaxZoom(windowStart, windowEnd);
+            if (clampedWindow) {
+                windowStart = clampedWindow.start;
+                windowEnd = clampedWindow.end;
+            }
 
             var timelineOptions = Object.assign({}, options, { start: windowStart, end: windowEnd });
             timeline = new vis.Timeline(container, items, groups, timelineOptions);
@@ -1268,7 +1299,7 @@ var options = {
 
                 if (props && props.start && props.end) {
                     const millis = props.end - props.start;
-                    const days = millis / (1000 * 60 * 60 * 24);
+                    const days = millis / TIMELINE_DAY_MS;
 
                     const width = container ? (container.clientWidth || container.offsetWidth || 1) : 1;
                     const daysPerPixel = days / width; // e.g. 0.02 ≈ 1 day every 50px;
