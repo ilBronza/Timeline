@@ -4,6 +4,8 @@ namespace IlBronza\Timeline\Helpers;
 
 class TimelineGroup
 {
+
+	//test automatic commit
 	public string $id;
 	public string $content;
 	public string $name;
