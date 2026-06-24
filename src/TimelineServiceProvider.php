@@ -28,10 +28,10 @@ class TimelineServiceProvider extends ServiceProvider
 		$this->publishes([
 			__DIR__ . '/../resources/views' => base_path('resources/views/vendor/timeline'),
 		], 'timeline.views');
+
+		$this->publishes([
+			__DIR__ . '/../resources/stubs/project/timeline.js' => resource_path('js/timeline.js'),
+			__DIR__ . '/../resources/stubs/project/timeline.less' => resource_path('less/timeline.less'),
+		], 'timeline.assets');
 	}
-
-
-
-
-	//areo qua
 }

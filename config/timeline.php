@@ -13,4 +13,13 @@ return [
 	 */
 	'updatableItemClass' => null,
 
+	/*
+	 * Compiled timeline assets in the host project public folder.
+	 * Build with a dedicated Mix entry (see readme); loaded only on timeline pages.
+	 */
+	'assets' => [
+		'js' => 'js/timeline.js',
+		'css' => 'css/timeline.css',
+	],
+
 ];

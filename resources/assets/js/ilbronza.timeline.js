@@ -1,38 +1,9 @@
-
-<div id="timeline-item-modal-template" hidden>
-    <div class="uk-modal" uk-modal>
-        <div class="uk-modal-dialog uk-modal-body">
-            <button class="uk-modal-close-default" type="button" uk-close></button>
-
-            <div class="uk-card uk-card-small">
-                <div class="uk-card-header">
-                    <h2 class="uk-modal-title"></h2>
-                </div>
-                <div class="uk-card-body">
-                    <div class="timeline-modal-content"></div>
-                </div>        
-                <div class="uk-card-footer">
-                    <dl class="uk-column-1-3">
-                        <dt>Start</dt>
-                        <dd class="start"></dd>
-                        <dt>End</dt>
-                        <dd class="end"></dd>
-                        <dt>Days</dt>
-                        <dd class="days"></dd>
-                    </dl>
-                </div>        
-            </div>
-        </div>
-    </div>
-</div>
-
-
-<script type="text/javascript">
-
+/**
+ * IlBronza Timeline page script.
+ * Requires vis-timeline (global `vis`) and jQuery (`$`) loaded before this file.
+ * Reads runtime config from #timeline-config (rendered by timeline::_timelineConfig).
+ */
     window.timelineDefaultTitle = 'N.D.';
-    window.possibleSellables = [];
-    window.possibleSuppliers = [];
-    window.possibleOrders = [];
 
     window.timelineLinkIframe = function(link)
     {
@@ -216,11 +187,11 @@
         window.fetchTimeline();
     });
 
-    const API_URL = "{{ $apiEndpoint }}";
-    const UPDATE_URL = "{{ $timelineUpdateRoute ?? '' }}";
-    const POSSIBLE_SELLABLES_URL = "{{ $possibleSellablesEndpoint ?? '' }}";
-    const STORE_TIMELINE_ROW_URL = "{{ $timelineStoreRowEndpoint ?? '' }}";
-    const TIMELINE_ZOOM_DAYS = {{ $zoom ?? config('timeline.zoom', 14) }};
+    const timelineConfig = JSON.parse(document.getElementById('timeline-config').textContent);
+    const API_URL = timelineConfig.apiUrl;
+    const UPDATE_URL = timelineConfig.updateUrl || '';
+    const CREATE_ROW_FORM_URL = timelineConfig.createRowFormUrl || '';
+    const TIMELINE_ZOOM_DAYS = timelineConfig.zoomDays;
     const TIMELINE_DAY_MS = 24 * 60 * 60 * 1000;
     const TIMELINE_MAX_ZOOM_MONTHS = 18;
     const TIMELINE_MAX_ZOOM_MS = TIMELINE_MAX_ZOOM_MONTHS * (365.25 / 12) * TIMELINE_DAY_MS;
@@ -520,37 +491,6 @@ window.onTimelineEndResize = function (item)
     });
 };
 
-window.loadPossibleSellables = async function ()
-{
-    if (!POSSIBLE_SELLABLES_URL)
-    {
-        window.possibleSellables = [];
-        window.possibleSuppliers = [];
-        window.possibleOrders = [];
-
-        return;
-    }
-
-    const res = await fetch(POSSIBLE_SELLABLES_URL, {headers: {'Accept': 'application/json'}});
-    if (!res.ok) throw new Error('HTTP ' + res.status + ' on ' + POSSIBLE_SELLABLES_URL);
-
-    const data = await res.json();
-
-    window.possibleSellables = Array.isArray(data.possibleSellables) ? data.possibleSellables : [];
-    window.possibleSuppliers = Array.isArray(data.possibleSuppliers) ? data.possibleSuppliers : [];
-    window.possibleOrders = Array.isArray(data.possibleOrders) ? data.possibleOrders : [];
-};
-
-window.escapeHtml = function (value)
-{
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-};
-
 window.formatTimeInputValue = function (date)
 {
     const year = date.getFullYear();
@@ -614,7 +554,7 @@ window.isTimelineHiddenDate = function (date, hiddenDates)
 
 window.getTimelineVisibleWindowMs = function ()
 {
-    const windowRange = window.timeline.getWindow();
+    const windowRange = timeline.getWindow();
 
     return windowRange.end.getTime() - windowRange.start.getTime();
 };
@@ -699,21 +639,28 @@ window.getTimelineCreateEndDatetime = function (startDate)
     return new Date(startDate.getTime() + (window.getTimelineVisibleWindowMs() * 0.20));
 };
 
-window.openTimelineCreateRowPopup = async function (datetime, groupId)
+window.openTimelineCreateRowFormPopup = async function (datetime, groupId)
 {
-    if (!STORE_TIMELINE_ROW_URL)
-    {
-        if (typeof window.addDangerNotification === 'function')
-            window.addDangerNotification('Store endpoint timeline non configurato');
-
-        return;
-    }
-
-    await window.loadPossibleSellables();
-
     const template = document.getElementById('timeline-item-modal-template');
-    if (!template)
-        return;
+
+    const startDatetime = window.snapTimelineCreateDatetime(datetime);
+    const endDatetime = window.getTimelineCreateEndDatetime(startDatetime);
+    const formUrl = new URL(CREATE_ROW_FORM_URL, window.location.origin);
+
+    formUrl.searchParams.set('starts_at', window.formatTimeInputValue(startDatetime));
+    formUrl.searchParams.set('ends_at', window.formatTimeInputValue(endDatetime));
+
+    if (groupId)
+        formUrl.searchParams.set('group_id', groupId);
+
+    const response = await fetch(formUrl.toString(), {
+        headers: {
+            'Accept': 'text/html',
+        },
+    });
+
+    if (!response.ok)
+        throw new Error('HTTP ' + response.status);
 
     const clone = template.firstElementChild.cloneNode(true);
     const modalId = 'timeline-create-modal-' + Date.now();
@@ -726,102 +673,31 @@ window.openTimelineCreateRowPopup = async function (datetime, groupId)
     if (footer)
         footer.remove();
 
-    const selectedSellable = groupId
-        ? window.possibleSellables.find(function (sellable) { return String(sellable.id) === String(groupId); })
-        : null;
-    const selectedSupplier = groupId
-        ? window.possibleSuppliers.find(function (supplier) { return String(supplier.id) === String(groupId); })
-        : null;
+    modalContent.innerHTML = await response.text();
 
-    modalTitleEl.textContent = selectedSellable
-        ? 'Nuova riga timeline — ' + selectedSellable.name
-        : (selectedSupplier ? 'Nuova riga timeline — ' + selectedSupplier.name : 'Nuova riga timeline');
+    const wrapper = clone.querySelector('.timeline-create-row-form-wrapper');
+    const form = clone.querySelector('.timeline-create-row-form') || clone.querySelector('form');
 
-    const startDatetime = window.snapTimelineCreateDatetime(datetime);
-    const endDatetime = window.getTimelineCreateEndDatetime(startDatetime);
+    if (!form)
+        throw new Error('Form timeline non configurato');
+
+    modalTitleEl.textContent = wrapper?.dataset.title || form.dataset.title || 'Nuova riga timeline';
+
+    const startsAtInput = clone.querySelector('[name="starts_at"]');
+    const endsAtInput = clone.querySelector('[name="ends_at"]');
     const defaultStartValue = window.formatTimeInputValue(startDatetime);
     const defaultEndValue = window.formatTimeInputValue(endDatetime);
-    const sellablesOptions = window.possibleSellables.map(function (sellable) {
-        return `<option value="${window.escapeHtml(sellable.id)}">${window.escapeHtml(sellable.name)}</option>`;
-    }).join('');
-    const suppliersOptions = window.possibleSuppliers.map(function (supplier) {
-        return `<option value="${window.escapeHtml(supplier.id)}">${window.escapeHtml(supplier.name)}</option>`;
-    }).join('');
-    const sellableFieldHtml = window.possibleSellables.length
-        ? `<div class="uk-margin">
-                <label class="uk-form-label" for="timeline-create-sellable">Sellable</label>
-                <div class="uk-form-controls">
-                    <select id="timeline-create-sellable" class="uk-select" name="sellable_id" required>
-                        <option value="">Seleziona sellable</option>
-                        ${sellablesOptions}
-                    </select>
-                </div>
-            </div>`
-        : '';
-    const supplierFieldHtml = window.possibleSuppliers.length
-        ? `<div class="uk-margin">
-                <label class="uk-form-label" for="timeline-create-supplier">Fornitore</label>
-                <div class="uk-form-controls">
-                    <select id="timeline-create-supplier" class="uk-select" name="supplier_id" required>
-                        <option value="">Seleziona fornitore</option>
-                        ${suppliersOptions}
-                    </select>
-                </div>
-            </div>`
-        : '';
-    const ordersOptions = window.possibleOrders.map(function (order) {
-        return `<option value="${window.escapeHtml(order.id)}">${window.escapeHtml(order.name)}</option>`;
-    }).join('');
-    const orderFieldHtml = window.possibleOrders.length
-        ? `<div class="uk-margin">
-                <label class="uk-form-label" for="timeline-create-order">Commessa</label>
-                <div class="uk-form-controls">
-                    <select id="timeline-create-order" class="uk-select" name="order_id" required>
-                        <option value="">Seleziona commessa</option>
-                        ${ordersOptions}
-                    </select>
-                </div>
-            </div>`
-        : '';
 
-    modalContent.innerHTML = `
-        <form class="uk-form-stacked timeline-create-row-form">
-            <div class="uk-margin">
-                <label class="uk-form-label" for="timeline-create-starts-at">Inizio</label>
-                <div class="uk-form-controls">
-                    <input id="timeline-create-starts-at" class="uk-input" type="datetime-local" name="starts_at" value="${defaultStartValue}" required>
-                </div>
-            </div>
-            <div class="uk-margin">
-                <label class="uk-form-label" for="timeline-create-ends-at">Fine</label>
-                <div class="uk-form-controls">
-                    <input id="timeline-create-ends-at" class="uk-input" type="datetime-local" name="ends_at" value="${defaultEndValue}" required>
-                </div>
-            </div>
-            ${orderFieldHtml}
-            ${sellableFieldHtml}
-            ${supplierFieldHtml}
-            <div class="uk-margin uk-text-right">
-                <button type="submit" class="uk-button uk-button-primary">Salva</button>
-            </div>
-        </form>
-    `;
+    if (startsAtInput && !startsAtInput.value)
+        startsAtInput.value = defaultStartValue;
+
+    if (endsAtInput && !endsAtInput.value)
+        endsAtInput.value = defaultEndValue;
 
     document.body.appendChild(clone);
 
     const modal = UIkit.modal('#' + modalId);
     modal.show();
-
-    const form = clone.querySelector('.timeline-create-row-form');
-    const startsAtInput = clone.querySelector('#timeline-create-starts-at');
-    const sellableSelect = clone.querySelector('#timeline-create-sellable');
-    const supplierSelect = clone.querySelector('#timeline-create-supplier');
-
-    if (sellableSelect && selectedSellable)
-        sellableSelect.value = String(selectedSellable.id);
-
-    if (supplierSelect && selectedSupplier)
-        supplierSelect.value = String(selectedSupplier.id);
 
     if (startsAtInput)
         setTimeout(function () { startsAtInput.focus(); }, 0);
@@ -831,62 +707,72 @@ window.openTimelineCreateRowPopup = async function (datetime, groupId)
         event.preventDefault();
 
         const formData = new FormData(form);
-        const payload = {
-            starts_at: window.parseTimeInputValue(formData.get('starts_at')).toISOString(),
-            ends_at: window.parseTimeInputValue(formData.get('ends_at')).toISOString(),
-        };
+        const payload = {};
 
-        if (window.possibleSellables.length)
-            payload.sellable_id = formData.get('sellable_id');
+        formData.forEach(function (value, key)
+        {
+            if (key !== '_token')
+                payload[key] = value;
+        });
 
-        if (window.possibleSuppliers.length)
-            payload.supplier_id = formData.get('supplier_id');
+        if (payload.starts_at)
+            payload.starts_at = window.parseTimeInputValue(payload.starts_at).toISOString();
 
-        if (window.possibleOrders.length)
-            payload.order_id = formData.get('order_id');
+        if (payload.ends_at)
+            payload.ends_at = window.parseTimeInputValue(payload.ends_at).toISOString();
 
         const saveButton = form.querySelector('button[type="submit"]');
+
         if (saveButton)
             saveButton.disabled = true;
 
-        try
-        {
-            const res = await fetch(STORE_TIMELINE_ROW_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        };
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-            const data = await res.json();
+        if (csrfToken)
+            headers['X-CSRF-TOKEN'] = csrfToken;
 
-            if (!res.ok || data.success !== true)
-                throw new Error(data.message || ('HTTP ' + res.status));
+        const saveResponse = await fetch(form.getAttribute('action'), {
+            method: form.getAttribute('method') || 'POST',
+            headers: headers,
+            body: JSON.stringify(payload),
+        });
 
-            if (typeof window.addSuccessNotification === 'function')
-                window.addSuccessNotification(data.message || 'Riga creata');
+        const data = await saveResponse.json();
 
-            modal.hide();
-            await window.fetchTimeline();
-        }
-        catch (error)
-        {
-            if (typeof window.addDangerNotification === 'function')
-                window.addDangerNotification(error.message || 'Errore durante il salvataggio');
-        }
-        finally
-        {
-            if (saveButton)
-                saveButton.disabled = false;
-        }
+        if (!saveResponse.ok || data.success !== true)
+            throw new Error(data.message || ('HTTP ' + saveResponse.status));
+
+        if (typeof window.addSuccessNotification === 'function')
+            window.addSuccessNotification(data.message || 'Riga creata');
+
+        modal.hide();
+        await window.fetchTimeline();
+
+        if (saveButton)
+            saveButton.disabled = false;
     });
 
     clone.addEventListener('hidden', function () {
         modal.$destroy(true);
         clone.remove();
     });
+};
+
+window.openTimelineCreateRowPopup = async function (datetime, groupId)
+{
+    if (!CREATE_ROW_FORM_URL)
+    {
+        if (typeof window.addDangerNotification === 'function')
+            window.addDangerNotification('Form creazione riga timeline non configurato');
+
+        return;
+    }
+
+    return window.openTimelineCreateRowFormPopup(datetime, groupId);
 };
 
 var options = {
@@ -1263,8 +1149,9 @@ var options = {
 
             var timelineOptions = Object.assign({}, options, { start: windowStart, end: windowEnd });
             timeline = new vis.Timeline(container, items, groups, timelineOptions);
+            window.timeline = timeline;
 
-            timeline.on('doubleClick', function (properties)
+            timeline.on('doubleClick', async function (properties)
             {
                 if (properties && properties.item)
                     return;
@@ -1272,11 +1159,7 @@ var options = {
                 if (!properties || !properties.time)
                     return;
 
-                window.openTimelineCreateRowPopup(new Date(properties.time), properties.group).catch(function (error)
-                {
-                    if (typeof window.addDangerNotification === 'function')
-                        window.addDangerNotification(error.message || 'Errore apertura popup timeline');
-                });
+                await window.openTimelineCreateRowPopup(new Date(properties.time), properties.group);
             });
 
             addWeekendBackgrounds(timeline, items);
@@ -1387,36 +1270,14 @@ var options = {
 
     window.fetchTimeline = async function ()
     {
-        try
-        {
-            // Expected shape: { groups: [...], items: [...] }
-
-            window.setTimelineData(
-                await window.loadTimelineData()
-            );
-
-
-        } catch (e)
-        {
-            window.addDangerNotification('Failed to load data:', e);
-        }
+        window.setTimelineData(
+            await window.loadTimelineData()
+        );
     };
 
     ;(async function bootstrapTimeline()
     {
-        try
-        {
-            await window.loadPossibleSellables();
-        }
-        catch (error)
-        {
-            console.error(error);
-
-            if (typeof window.addDangerNotification === 'function')
-                window.addDangerNotification(error.message || 'Errore caricamento sellables timeline');
-        }
-
         await window.fetchTimeline();
-    })();
 
-</script>
+        document.dispatchEvent(new CustomEvent('timeline:ready'));
+    })();

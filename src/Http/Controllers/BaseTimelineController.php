@@ -20,12 +20,7 @@ abstract class BaseTimelineController extends CRUD
 
 	abstract public function getEndpoint() : string;
 
-	public function getPossibleSellablesEndpoint() : ?string
-	{
-		return null;
-	}
-
-	public function getTimelineStoreRowEndpoint() : ?string
+	public function getTimelineCreateRowFormEndpoint() : ?string
 	{
 		return null;
 	}
@@ -52,8 +47,7 @@ abstract class BaseTimelineController extends CRUD
 	{
 		$apiEndpoint = $this->getEndpoint();
 		$timelineUpdateRoute = $this->getTimelineUpdateRoute();
-		$possibleSellablesEndpoint = $this->getPossibleSellablesEndpoint();
-		$timelineStoreRowEndpoint = $this->getTimelineStoreRowEndpoint();
+		$timelineCreateRowFormEndpoint = $this->getTimelineCreateRowFormEndpoint();
 
 		$modelInstance = $this->getModel();
 
@@ -61,7 +55,7 @@ abstract class BaseTimelineController extends CRUD
 
 		$zoom = $this->zoom ?? config('timeline.zoom', 14);
 
-		return view('timeline::timeline', compact('apiEndpoint', 'timelineUpdateRoute', 'possibleSellablesEndpoint', 'timelineStoreRowEndpoint', 'modelInstance', 'buttons', 'zoom'));
+		return view('timeline::timeline', compact('apiEndpoint', 'timelineUpdateRoute', 'timelineCreateRowFormEndpoint', 'modelInstance', 'buttons', 'zoom'));
 	}
 
 	public function getOptionMethod(string $option) : string

@@ -12,12 +12,56 @@ composer require ilbronza/timeline
 
 The service provider is auto-discovered.
 
-The host project must load the vis-timeline JS/CSS assets, e.g.:
+### Frontend assets (host project)
 
-```html
-<script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css" />
+Timeline JS/CSS are **not** inlined in Blade anymore. The package ships static assets under `resources/assets/` and loads them on timeline pages only.
+
+1. Install vis-timeline in the host project:
+
+```bash
+npm install vis-timeline --save
 ```
+
+2. Publish starter Mix entry files (optional):
+
+```bash
+php artisan vendor:publish --tag=timeline.assets
+```
+
+3. Add dedicated webpack entries (keep **out** of `app.js`):
+
+```js
+// webpack.mix.js
+mix.js('resources/js/timeline.js', 'public/js/timeline.js')
+    .less('resources/less/timeline.less', 'public/css/timeline.css');
+```
+
+`resources/js/timeline.js` and `resources/less/timeline.less` are provided as stubs in the package (`resources/stubs/project/`).
+
+4. Build:
+
+```bash
+npm run dev
+# or
+npm run production
+```
+
+5. Remove any CDN/unpkg `vis-timeline` tags from project layouts (e.g. `layouts/_projectScripts.blade.php`) — vis-timeline is now bundled in `public/js/timeline.js`.
+
+Timeline pages include `timeline::_timelineAssets`, which emits `timeline.css`, `timeline.js`, and a small JSON config block (`#timeline-config`). Override paths in config if needed:
+
+```php
+'assets' => [
+    'js' => 'js/timeline.js',
+    'css' => 'css/timeline.css',
+],
+```
+
+Project-specific timeline styles (group labels, etc.) belong in the host `timeline.less`, after the package import.
+
+### Extending timeline JS
+
+`timeline.js` is loaded with `defer`. Any host script that wraps or replaces globals such as `window.openTimelineCreateRowPopup` must also use `defer` and be included **after** `timeline::_timeline`, so it runs once the package script has defined those functions. Alternatively, listen for the `timeline:ready` event fired after the initial data load.
 
 ## Configuration
 
@@ -34,6 +78,11 @@ return [
     // model class used to build the drag&drop update route.
     // must use IsTimelineItemTrait (or expose getTimelineUpdateUrl())
     'updatableItemClass' => \IlBronza\Products\Models\Orders\Orderrow::class,
+
+    'assets' => [
+        'js' => 'js/timeline.js',
+        'css' => 'css/timeline.css',
+    ],
 ];
 ```
 
@@ -132,6 +181,7 @@ Config changes:
 View changes:
 
 - `crud::timeline.timeline` → `timeline::timeline`
+- inline `_timelineScripts` / `_timelineStyle` → `public/js/timeline.js` + `public/css/timeline.css` (see Installation)
 
 After migrating, the `Timeline` folders in `ilbronza/crud` (`src/Traits/Timeline`, `src/Http/Controllers/Timeline`, `src/Helpers/TimelineHelpers`, `src/Interfaces/TimelineInterfaces`, `src/Interfaces/GanttTimelineInterface.php`, `resources/views/timeline`) can be removed.
 

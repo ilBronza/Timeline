@@ -1,4 +1,4 @@
-	<div id="timelinecontainer"></div>
+<div id="timelinecontainer"></div>
 
-    @include('timeline::_timelineStyle')
-    @include('timeline::_timelineScripts')
+@include('timeline::_timelineModal')
+@include('timeline::_timelineAssets')
