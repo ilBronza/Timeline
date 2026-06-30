@@ -10,7 +10,7 @@ trait GanttTimelineTrait
 	{
 		return Button::create([
 			'href' => $this->getGanttUrl(),
-			'text' => 'crud::fields.gantt',
+			'text' => 'crud::fields.gantt',// qua il nome deve riportare gantt by qualcosa
 			'icon' => 'chart-gantt'
 		]);
 	}

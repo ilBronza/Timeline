@@ -19,6 +19,7 @@ abstract class BaseTimelineController extends CRUD
 	];
 
 	abstract public function getEndpoint() : string;
+	abstract public function getTimelineItemModalEndpoint() : string;
 
 	public function getTimelineCreateRowFormEndpoint() : ?string
 	{
@@ -48,6 +49,7 @@ abstract class BaseTimelineController extends CRUD
 		$apiEndpoint = $this->getEndpoint();
 		$timelineUpdateRoute = $this->getTimelineUpdateRoute();
 		$timelineCreateRowFormEndpoint = $this->getTimelineCreateRowFormEndpoint();
+		$timelineItemModalEndpoint = $this->getTimelineItemModalEndpoint();
 
 		$modelInstance = $this->getModel();
 
@@ -55,7 +57,7 @@ abstract class BaseTimelineController extends CRUD
 
 		$zoom = $this->zoom ?? config('timeline.zoom', 14);
 
-		return view('timeline::timeline', compact('apiEndpoint', 'timelineUpdateRoute', 'timelineCreateRowFormEndpoint', 'modelInstance', 'buttons', 'zoom'));
+		return view('timeline::timeline', compact('apiEndpoint', 'timelineUpdateRoute', 'timelineCreateRowFormEndpoint', 'timelineItemModalEndpoint', 'modelInstance', 'buttons', 'zoom'));
 	}
 
 	public function getOptionMethod(string $option) : string
@@ -89,6 +91,17 @@ abstract class BaseTimelineController extends CRUD
 	public function getItems() : array
 	{
 		return $this->items;
+	}
+
+	public function getMainTimelineData()
+	{
+		$orderrows = $this->getRows();
+		$groupItems = $this->getGroupItems();
+
+		$this->createGroupsByCollection($groupItems);
+		$this->createItemsByCollectionAndGetter($orderrows, 'getSupplierTimelineGroup');
+
+		return $this->sendResponse();
 	}
 
 	public function sendResponse()

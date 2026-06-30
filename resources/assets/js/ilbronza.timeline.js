@@ -100,13 +100,21 @@
 </form>`;
     };
 
-    window.openTimelineItemLinksModal = function(button)
+    window.openTimelineItemLinksModal = async function(button)
     {
         const itemId = button.dataset.itemId;
         if (!itemId) return;
 
         const item = items.get(itemId);
         if (!item) return;
+
+        const timelineConfigEl = document.getElementById('timeline-config');
+        const itemModalUrl = timelineConfigEl
+            ? (JSON.parse(timelineConfigEl.textContent).itemModalUrl || '')
+            : '';
+
+        if (!itemModalUrl)
+            return;
 
         const template = document.getElementById('timeline-item-modal-template');
         if (!template) return;
@@ -118,42 +126,9 @@
         const modalContent = clone.querySelector('.timeline-modal-content');
         const modalTitleEl = clone.querySelector('.uk-modal-title');
 
-        modalTitleEl.textContent = item.title ?? window.timelineDefaultTitle;
+        modalTitleEl.textContent = item.popupTitle ?? item.title ?? window.timelineDefaultTitle;
+        modalContent.innerHTML = '<div class="uk-text-center uk-padding"><div uk-spinner></div></div>';
 
-        let html = '';
-
-        const renderLink = function(link) {
-            if (link.method === 'DELETE')
-                return window.timelineLinkForm(link);
-
-            if (link.target === 'iframe')
-                return window.timelineLinkIframe(link);
-
-            if (link.target)
-                return window.timelineLinkTarget(link, link.target);
-
-            return window.timelineLinkTarget(link, false);
-        };
-
-        if (Array.isArray(item.links)) {
-            html += item.links.map(renderLink).join('');
-        }
-
-        if (Array.isArray(item.rightLinks) && item.rightLinks.length) {
-            html += '<div class="uk-margin-top">';
-            html += item.rightLinks.map(renderLink).join('');
-            html += '</div>';
-        }
-
-        if (item.description)
-            html += `<div class="uk-margin-top"><small>${item.description}</small></div>`;
-
-        if (item.content)
-            html += `<div class="uk-margin-top">${item.content}</div>`;
-
-        modalContent.innerHTML = html;
-
-        // --- Compute precise start/end and inject into footer ---
         const startDate = item.start ? new Date(item.start) : null;
         const endDate   = item.end ? new Date(item.end) : null;
 
@@ -181,6 +156,33 @@
             modal.$destroy(true);
             clone.remove();
         });
+
+        const formData = new URLSearchParams();
+        formData.set('itemId', itemId);
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        if (csrfToken)
+            formData.set('_token', csrfToken);
+
+        const headers = {
+            'Accept': 'text/html',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        };
+
+        if (csrfToken)
+            headers['X-CSRF-TOKEN'] = csrfToken;
+
+        const response = await fetch(itemModalUrl, {
+            method: 'POST',
+            headers: headers,
+            body: formData.toString(),
+        });
+
+        modalContent.innerHTML = await response.text();
+
+        if (typeof UIkit !== 'undefined' && typeof UIkit.update === 'function')
+            UIkit.update(modalContent);
     };
 
     window.addEventListener('sis-lightboxClosed', function() {
