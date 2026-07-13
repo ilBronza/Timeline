@@ -193,6 +193,10 @@
     const API_URL = timelineConfig.apiUrl;
     const UPDATE_URL = timelineConfig.updateUrl || '';
     const CREATE_ROW_FORM_URL = timelineConfig.createRowFormUrl || '';
+
+    if (! CREATE_ROW_FORM_URL)
+        alert('Form creazione riga timeline non configurato "timelineConfig.createRowFormUrl"');
+
     const TIMELINE_ZOOM_DAYS = timelineConfig.zoomDays;
     const TIMELINE_DAY_MS = 24 * 60 * 60 * 1000;
     const TIMELINE_MAX_ZOOM_MONTHS = 18;
@@ -766,7 +770,7 @@ window.openTimelineCreateRowFormPopup = async function (datetime, groupId)
 
 window.openTimelineCreateRowPopup = async function (datetime, groupId)
 {
-    if (!CREATE_ROW_FORM_URL)
+    if (! CREATE_ROW_FORM_URL)
     {
         if (typeof window.addDangerNotification === 'function')
             window.addDangerNotification('Form creazione riga timeline non configurato');
