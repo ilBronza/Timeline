@@ -12,6 +12,8 @@ class TimelineItemCreatorHelper
 		$item = new TimelineItem();
 
 		$item->id = $model->getTimelineItemId($groupModel);
+		$item->showPopupUrl = $model->getTimelineItemShowPopupUrl($groupModel);
+
 		$item->links = $model->getTimelineItemActions($groupModel);
 
 		$item->rightLinks = $model->getTimelineItemRightLinks($groupModel);

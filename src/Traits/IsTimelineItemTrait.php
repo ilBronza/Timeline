@@ -24,6 +24,11 @@ trait IsTimelineItemTrait
 		return $this->getKey();
 	}
 
+	public function getTimelineItemShowPopupUrl(? TimelineGroupInterface $groupModel) : string
+	{
+		return $this->getKeyedRoute('showTimelinePopup');
+	}
+
 	public function getTimelineItemStartsAt(? TimelineGroupInterface $groupModel) : Carbon
 	{
 		return $this->getStartsAt() ?? Carbon::now();

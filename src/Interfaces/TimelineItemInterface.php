@@ -26,4 +26,6 @@ interface TimelineItemInterface
 
 	public function getTimelineItemActions(? TimelineGroupInterface $groupModel) : array;
 	public function getTimelineItemRightLinks(? TimelineGroupInterface $groupModel) : array;
+
+	public function getTimelineItemShowPopupUrl(? TimelineGroupInterface $groupModel) : string;
 }

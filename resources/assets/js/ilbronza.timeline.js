@@ -108,12 +108,13 @@
         const item = items.get(itemId);
         if (!item) return;
 
+        const showPopupUrl = item.showPopupUrl || '';
         const timelineConfigEl = document.getElementById('timeline-config');
         const itemModalUrl = timelineConfigEl
             ? (JSON.parse(timelineConfigEl.textContent).itemModalUrl || '')
             : '';
 
-        if (!itemModalUrl)
+        if (!showPopupUrl && !itemModalUrl)
             return;
 
         const template = document.getElementById('timeline-item-modal-template');
@@ -157,27 +158,41 @@
             clone.remove();
         });
 
-        const formData = new URLSearchParams();
-        formData.set('itemId', itemId);
+        let response;
 
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (showPopupUrl)
+        {
+            response = await fetch(showPopupUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'text/html',
+                },
+            });
+        }
+        else
+        {
+            const formData = new URLSearchParams();
+            formData.set('itemId', itemId);
 
-        if (csrfToken)
-            formData.set('_token', csrfToken);
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-        const headers = {
-            'Accept': 'text/html',
-            'Content-Type': 'application/x-www-form-urlencoded',
-        };
+            if (csrfToken)
+                formData.set('_token', csrfToken);
 
-        if (csrfToken)
-            headers['X-CSRF-TOKEN'] = csrfToken;
+            const headers = {
+                'Accept': 'text/html',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            };
 
-        const response = await fetch(itemModalUrl, {
-            method: 'POST',
-            headers: headers,
-            body: formData.toString(),
-        });
+            if (csrfToken)
+                headers['X-CSRF-TOKEN'] = csrfToken;
+
+            response = await fetch(itemModalUrl, {
+                method: 'POST',
+                headers: headers,
+                body: formData.toString(),
+            });
+        }
 
         modalContent.innerHTML = await response.text();
 

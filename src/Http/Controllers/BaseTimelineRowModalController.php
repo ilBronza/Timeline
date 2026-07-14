@@ -37,7 +37,11 @@ abstract class BaseTimelineRowModalController extends CRUD
 
 	public function timelineModal(Request $request)
 	{
-		$this->row = $this->getRow($request->itemId);
+		$rowId = $request->input('rowId', $request->input('itemId'));
+
+		abort_unless($rowId, 404);
+
+		$this->row = $this->getRow($rowId);
 
 		$buttons = $this->getButtonsColection();
 
