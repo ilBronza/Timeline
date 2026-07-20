@@ -2,6 +2,10 @@
 
 @section('content')
 
+	@if($pageTitle ?? null)
+	<h1>{!! $pageTitle !!}</h1>
+	@endif
+
 	<div class="uk-card uk-card-default uk-card-body uk-margin-bottom">
 		<div class="uk-card-header">
 			<div uk-grid>
