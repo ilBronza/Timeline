@@ -23,9 +23,9 @@ interface TimelineItemInterface
 	public function getTimelineItemHtmlClasses(? TimelineGroupInterface $groupModel) : array;
 
 	public function getTimelineItemUpdateUrl(? TimelineGroupInterface $groupModel) : ? string;
+	public function getTimelineItemDeleteUrl(? TimelineGroupInterface $groupModel) : ? string;
+	public function getTimelineItemModalUrl(? TimelineGroupInterface $groupModel) : ? string;
 
 	public function getTimelineItemActions(? TimelineGroupInterface $groupModel) : array;
 	public function getTimelineItemRightLinks(? TimelineGroupInterface $groupModel) : array;
-
-	public function getTimelineItemShowPopupUrl(? TimelineGroupInterface $groupModel) : string;
 }

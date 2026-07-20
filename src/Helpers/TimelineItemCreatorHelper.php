@@ -12,7 +12,6 @@ class TimelineItemCreatorHelper
 		$item = new TimelineItem();
 
 		$item->id = $model->getTimelineItemId($groupModel);
-		$item->showPopupUrl = $model->getTimelineItemShowPopupUrl($groupModel);
 
 		$item->links = $model->getTimelineItemActions($groupModel);
 
@@ -39,6 +38,11 @@ class TimelineItemCreatorHelper
 		$item->title = $model->getTimelineItemTitle($groupModel);
 
 		$item->popupTitle = $model->getTimelineItemPopuptitle($groupModel);
+
+		if(method_exists($model, 'getTimelineItemDeleteUrl'))
+			$item->deleteUrl = $model->getTimelineItemDeleteUrl($groupModel);
+
+		$item->modalUrl = $model->getTimelineItemModalUrl($groupModel);
 
 		$item->description = $model->getTimelineItemDescription($groupModel);
 

@@ -19,7 +19,6 @@ abstract class BaseTimelineController extends CRUD
 	];
 
 	abstract public function getEndpoint() : string;
-	abstract public function getTimelineItemModalEndpoint() : string;
 
 	public function getTimelineCreateRowFormEndpoint() : ?string
 	{
@@ -46,10 +45,13 @@ abstract class BaseTimelineController extends CRUD
 
 	public function returnGanttContainer()
 	{
+		$this->setPageTitle();
+
+		$pageTitle = $this->pageTitle ?? null;
+
 		$apiEndpoint = $this->getEndpoint();
 		$timelineUpdateRoute = $this->getTimelineUpdateRoute();
 		$timelineCreateRowFormEndpoint = $this->getTimelineCreateRowFormEndpoint();
-		$timelineItemModalEndpoint = $this->getTimelineItemModalEndpoint();
 
 		$modelInstance = $this->getModel();
 
@@ -57,7 +59,7 @@ abstract class BaseTimelineController extends CRUD
 
 		$zoom = $this->zoom ?? config('timeline.zoom', 14);
 
-		return view('timeline::timeline', compact('apiEndpoint', 'timelineUpdateRoute', 'timelineCreateRowFormEndpoint', 'timelineItemModalEndpoint', 'modelInstance', 'buttons', 'zoom'));
+		return view('timeline::timeline', compact('pageTitle', 'apiEndpoint', 'timelineUpdateRoute', 'timelineCreateRowFormEndpoint', 'modelInstance', 'buttons', 'zoom'));
 	}
 
 	public function getOptionMethod(string $option) : string

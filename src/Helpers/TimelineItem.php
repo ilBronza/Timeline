@@ -12,8 +12,9 @@ class TimelineItem
 	public string $itemType;
 	public string $style;
 	public string $popupTitle;
-	public ? string $showPopupUrl = null;
 	public ?string $updateUrl;
+	public ?string $deleteUrl = null;
+	public ?string $modalUrl = null;
 	public ? string $description;
 
 	public array $links = [];

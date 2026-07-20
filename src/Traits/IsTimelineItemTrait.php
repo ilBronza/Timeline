@@ -24,11 +24,6 @@ trait IsTimelineItemTrait
 		return $this->getKey();
 	}
 
-	public function getTimelineItemShowPopupUrl(? TimelineGroupInterface $groupModel) : string
-	{
-		return $this->getKeyedRoute('showTimelinePopup');
-	}
-
 	public function getTimelineItemStartsAt(? TimelineGroupInterface $groupModel) : Carbon
 	{
 		return $this->getStartsAt() ?? Carbon::now();
@@ -80,5 +75,25 @@ trait IsTimelineItemTrait
 	public function getTimelineItemUpdateUrl(? TimelineGroupInterface $groupModel) : ? string
 	{
 		return $this->getUpdateUrl();
+	}
+
+	public function getTimelineItemDeleteUrl(? TimelineGroupInterface $groupModel) : ? string
+	{
+		try
+		{
+			return $this->getDeleteUrl();
+		}
+		catch(\Exception $e)
+		{
+			return null;
+		}
+	}
+
+	public function getTimelineItemModalUrl(? TimelineGroupInterface $groupModel) : ? string
+	{
+		return route('timeline.itemModal', [
+			'model' => $this->getMorphClass(),
+			'key' => $this->getKey(),
+		]);
 	}
 }

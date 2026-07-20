@@ -5,7 +5,10 @@
 
             <div class="uk-card uk-card-small">
                 <div class="uk-card-header">
-                    <h2 class="uk-modal-title"></h2>
+                    <div class="uk-flex uk-flex-between uk-flex-middle">
+                        <h2 class="uk-modal-title uk-margin-remove"></h2>
+                        <div class="timeline-modal-header-actions"></div>
+                    </div>
                 </div>
                 <div class="uk-card-body">
                     <div class="timeline-modal-content"></div>

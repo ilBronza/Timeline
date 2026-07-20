@@ -9,6 +9,7 @@ class TimelineServiceProvider extends ServiceProvider
 	public function boot(): void
 	{
 		$this->loadViewsFrom(__DIR__ . '/../resources/views', 'timeline');
+		$this->loadRoutesFrom(__DIR__ . '/../routes/timeline.php');
 
 		if ($this->app->runningInConsole())
 			$this->bootForConsole();

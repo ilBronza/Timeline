@@ -108,13 +108,9 @@
         const item = items.get(itemId);
         if (!item) return;
 
-        const showPopupUrl = item.showPopupUrl || '';
-        const timelineConfigEl = document.getElementById('timeline-config');
-        const itemModalUrl = timelineConfigEl
-            ? (JSON.parse(timelineConfigEl.textContent).itemModalUrl || '')
-            : '';
+        const itemModalUrl = item.modalUrl || '';
 
-        if (!showPopupUrl && !itemModalUrl)
+        if (!itemModalUrl)
             return;
 
         const template = document.getElementById('timeline-item-modal-template');
@@ -129,6 +125,59 @@
 
         modalTitleEl.textContent = item.popupTitle ?? item.title ?? window.timelineDefaultTitle;
         modalContent.innerHTML = '<div class="uk-text-center uk-padding"><div uk-spinner></div></div>';
+
+        const headerActionsEl = clone.querySelector('.timeline-modal-header-actions');
+
+        if (item.deleteUrl && headerActionsEl)
+        {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'uk-button uk-button-danger uk-button-small timeline-modal-delete-button';
+            deleteBtn.innerHTML = '<i class="fa fa-trash"></i>';
+            deleteBtn.setAttribute('uk-tooltip', 'Elimina riga timeline');
+
+            deleteBtn.onclick = async function(e)
+            {
+                e.stopPropagation();
+
+                if (! confirm('Eliminare questa riga della timeline?'))
+                    return;
+
+                deleteBtn.disabled = true;
+
+                const deleteCsrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+                const deleteHeaders = {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                };
+
+                if (deleteCsrfToken)
+                    deleteHeaders['X-CSRF-TOKEN'] = deleteCsrfToken;
+
+                try
+                {
+                    const deleteResponse = await fetch(item.deleteUrl, {
+                        method: 'DELETE',
+                        headers: deleteHeaders,
+                    });
+
+                    if (! deleteResponse.ok)
+                        throw new Error('HTTP ' + deleteResponse.status);
+
+                    UIkit.modal('#' + modalId).hide();
+
+                    window.fetchTimeline();
+                }
+                catch (error)
+                {
+                    deleteBtn.disabled = false;
+                    alert('Errore durante l\'eliminazione della riga timeline');
+                }
+            };
+
+            headerActionsEl.appendChild(deleteBtn);
+        }
 
         const startDate = item.start ? new Date(item.start) : null;
         const endDate   = item.end ? new Date(item.end) : null;
@@ -158,41 +207,13 @@
             clone.remove();
         });
 
-        let response;
-
-        if (showPopupUrl)
-        {
-            response = await fetch(showPopupUrl, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'text/html',
-                },
-            });
-        }
-        else
-        {
-            const formData = new URLSearchParams();
-            formData.set('itemId', itemId);
-
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-
-            if (csrfToken)
-                formData.set('_token', csrfToken);
-
-            const headers = {
+        const response = await fetch(itemModalUrl, {
+            method: 'GET',
+            headers: {
                 'Accept': 'text/html',
-                'Content-Type': 'application/x-www-form-urlencoded',
-            };
-
-            if (csrfToken)
-                headers['X-CSRF-TOKEN'] = csrfToken;
-
-            response = await fetch(itemModalUrl, {
-                method: 'POST',
-                headers: headers,
-                body: formData.toString(),
-            });
-        }
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
 
         modalContent.innerHTML = await response.text();
 
