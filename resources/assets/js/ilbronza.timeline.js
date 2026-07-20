@@ -1352,14 +1352,156 @@ var options = {
         });
     }
 
+    // --- Groups visibility filter (button + modal with checkboxes) ---
+    const TIMELINE_HIDDEN_GROUPS_STORAGE_KEY = [
+        'timeline-hidden-groups',
+        window.location.origin,
+        window.location.pathname,
+        window.location.search
+    ].join(':');
+
+    function getHiddenGroupIds()
+    {
+        try
+        {
+            const stored = JSON.parse(window.localStorage.getItem(TIMELINE_HIDDEN_GROUPS_STORAGE_KEY));
+
+            return new Set(Array.isArray(stored) ? stored.map(String) : []);
+        }
+        catch (error)
+        {
+            return new Set();
+        }
+    }
+
+    function storeHiddenGroupIds(hiddenIds)
+    {
+        try
+        {
+            window.localStorage.setItem(TIMELINE_HIDDEN_GROUPS_STORAGE_KEY, JSON.stringify(Array.from(hiddenIds)));
+        }
+        catch (error)
+        {
+            // Storage non disponibile: il filtro vale solo per la sessione corrente.
+        }
+    }
+
+    function getTimelineGroupPlainLabel(group)
+    {
+        const raw = group.name ?? group.content ?? group.title ?? group.label ?? String(group.id);
+        const template = document.createElement('template');
+
+        template.innerHTML = String(raw);
+
+        return (template.content.textContent || String(group.id)).trim() || String(group.id);
+    }
+
+    function updateTimelineGroupsFilterBadge()
+    {
+        const badge = document.getElementById('timeline-groups-filter-badge');
+        if (! badge)
+            return;
+
+        const knownIds = new Set(groups.getIds().map(String));
+        const hiddenCount = Array.from(getHiddenGroupIds()).filter(id => knownIds.has(id)).length;
+
+        badge.textContent = hiddenCount;
+        badge.hidden = hiddenCount === 0;
+    }
+
+    function setTimelineGroupVisibility(groupId, visible)
+    {
+        const hiddenIds = getHiddenGroupIds();
+
+        if (visible)
+            hiddenIds.delete(String(groupId));
+        else
+            hiddenIds.add(String(groupId));
+
+        storeHiddenGroupIds(hiddenIds);
+
+        groups.update({id: groupId, visible: visible});
+
+        updateTimelineGroupsFilterBadge();
+    }
+
+    function renderTimelineGroupsFilterList()
+    {
+        const listEl = document.getElementById('timeline-groups-filter-list');
+        if (! listEl)
+            return;
+
+        const hiddenIds = getHiddenGroupIds();
+
+        const sortedGroups = groups.get().slice().sort(function (a, b)
+        {
+            return getTimelineGroupPlainLabel(a).localeCompare(getTimelineGroupPlainLabel(b), 'it', {sensitivity: 'base'});
+        });
+
+        listEl.innerHTML = '';
+
+        sortedGroups.forEach(function (group)
+        {
+            const label = document.createElement('label');
+            label.className = 'uk-display-block uk-margin-small-bottom';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'uk-checkbox uk-margin-small-right timeline-groups-filter-checkbox';
+            checkbox.checked = ! hiddenIds.has(String(group.id));
+            checkbox.dataset.groupId = String(group.id);
+
+            checkbox.addEventListener('change', function ()
+            {
+                setTimelineGroupVisibility(group.id, checkbox.checked);
+            });
+
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(getTimelineGroupPlainLabel(group)));
+
+            listEl.appendChild(label);
+        });
+
+        updateTimelineGroupsFilterBadge();
+    }
+
+    function setAllTimelineGroupsVisibility(visible)
+    {
+        const hiddenIds = visible ? new Set() : new Set(groups.getIds().map(String));
+
+        storeHiddenGroupIds(hiddenIds);
+
+        groups.update(groups.getIds().map(function (id)
+        {
+            return {id: id, visible: visible};
+        }));
+
+        renderTimelineGroupsFilterList();
+    }
+
+    document.getElementById('timeline-groups-filter-all')
+        ?.addEventListener('click', function () { setAllTimelineGroupsVisibility(true); });
+
+    document.getElementById('timeline-groups-filter-none')
+        ?.addEventListener('click', function () { setAllTimelineGroupsVisibility(false); });
+
     window.setTimelineData = function (data)
     {
         const currentWindow = timeline ? timeline.getWindow() : null;
 
         if (data.groups)
         {
+            const hiddenGroupIds = getHiddenGroupIds();
+
+            data.groups.forEach(function (group)
+            {
+                group.visible = ! hiddenGroupIds.has(String(group.id));
+            });
+
             groups.clear();
             groups.update(data.groups);
+
+            renderTimelineGroupsFilterList();
         }
 
         if (data.items)
