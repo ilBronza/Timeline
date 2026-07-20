@@ -337,8 +337,55 @@
         {
             if (event.relatedTarget && container.contains(event.relatedTarget))
                 return;
+
+            clearTimelineSelection();
+        });
+
+        // Click fuori dalla timeline: esce dalla modalità modifica e l'item
+        // torna al colore di base (la classe .vis-selected viene rimossa).
+        document.addEventListener('pointerdown', function (event)
+        {
+            if (!timeline)
+                return;
+
+            if (container.contains(event.target))
+                return;
+
+            // Non deselezionare mentre si opera su modali/lightbox aperti dall'item.
+            if (event.target.closest('.uk-modal, .uk-lightbox, .uk-drop, .uk-dropdown, .uk-notification'))
+                return;
+
+            clearTimelineSelection();
+        }, true);
+
+        document.addEventListener('keydown', function (event)
+        {
+            if (event.key === 'Escape')
+                clearTimelineSelection();
         });
     }
+
+    // Toglie la selezione (= modalità modifica) da tutti gli item.
+    // Il colore di base non va salvato da nessuna parte: non viene mai
+    // sovrascritto, la tinta di modifica è solo un overlay CSS legato a
+    // .vis-selected. Basta togliere la selezione perché torni l'originale.
+    function clearTimelineSelection()
+    {
+        if (timeline && typeof timeline.setSelection === 'function')
+            timeline.setSelection([]);
+
+        // Sicurezza: se vis dovesse lasciare la classe appesa dopo un redraw,
+        // la si rimuove a mano.
+        if (container)
+            container.querySelectorAll('.vis-item.vis-selected').forEach(function (el)
+            {
+                el.classList.remove('vis-selected');
+            });
+    }
+
+    // Colore/stile originale di ogni item, indicizzato per id.
+    // Serve perché il template azzera item.style dopo il primo render.
+    const timelineBaseStyles = new Map();
 
     // Create a DataSet (allows two way data-binding)
     var items = new vis.DataSet([]);
@@ -859,23 +906,34 @@ var options = {
             wrapper.dataset.itemId = item.id;
 
             // --- Move style from vis-item to wrapper ---
+            // item.style veniva azzerato per impedire a vis di applicarlo a .vis-item,
+            // ma il template viene rieseguito a ogni redraw (selezione, drag, resize):
+            // dal secondo giro in poi item.style era null e l'item cadeva nel colore
+            // di fallback, restandoci per sempre. Il colore di base va quindi
+            // memorizzato prima di azzerarlo.
             if (item.style)
+                timelineBaseStyles.set(item.id, item.style);
+
+            const baseStyle = item.style || timelineBaseStyles.get(item.id) || null;
+
+            if (baseStyle)
             {
                 // If style is a CSS string (default vis behavior)
-                if (typeof item.style === 'string')
+                if (typeof baseStyle === 'string')
                 {
-                    wrapper.style.cssText += item.style;
-                    item.style = null; // prevent vis from applying it to .vis-item
+                    wrapper.style.cssText += baseStyle;
                 }
                 // If style is an object coming from backend
-                else if (typeof item.style === 'object')
+                else if (typeof baseStyle === 'object')
                 {
-                    if (item.style.backgroundColor)
-                        wrapper.style.backgroundColor = item.style.backgroundColor;
+                    if (baseStyle.backgroundColor)
+                        wrapper.style.backgroundColor = baseStyle.backgroundColor;
 
-                    if (item.style.textColor)
-                        wrapper.style.color = item.style.textColor;
+                    if (baseStyle.textColor)
+                        wrapper.style.color = baseStyle.textColor;
                 }
+
+                item.style = null; // prevent vis from applying it to .vis-item
             }
 
             // --- Fallback background color if none provided ---
@@ -883,6 +941,11 @@ var options = {
                 wrapper.style.backgroundColor = '#607d8b'; // default fallback color
                 wrapper.style.color = '#ffffff';
             }
+
+            // Colore di base esposto anche come attributo, utile per debug
+            // e per ripristini fatti da fuori.
+            wrapper.dataset.baseBackground = wrapper.style.backgroundColor;
+            wrapper.dataset.baseColor = wrapper.style.color;
 
             let linksHtml = '';
 
