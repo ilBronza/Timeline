@@ -419,6 +419,29 @@
         return itemEl.closest('.vis-item')?.querySelector('.vis-item-content') || null;
     }
 
+    // Con .vis-item-overflow:hover { overflow: visible }, il contenuto degli
+    // item traslati da vis (translateX applicato per tenere visibile il titolo
+    // quando l'item inizia prima della finestra) sbordava a destra della barra
+    // per l'intera traslazione: la barra colorata si "allungava" in hover.
+    // Riducendo la larghezza dello stesso shift, il contenuto termina esattamente
+    // al bordo destro dell'item.
+    function clampShiftedContentWidth(contentEl)
+    {
+        if (!contentEl)
+            return;
+
+        const match = (contentEl.style.transform || '').match(/translateX\((-?[\d.]+)px\)/);
+
+        if (match && parseFloat(match[1]) > 0)
+            contentEl.style.width = 'calc(100% - ' + match[1] + 'px)';
+    }
+
+    function resetShiftedContentWidth(contentEl)
+    {
+        if (contentEl && contentEl.style.width)
+            contentEl.style.width = '';
+    }
+
     // Rimuove tutti i gruppi di pulsanti tranne quello passato come eccezione.
     // È la rete di sicurezza per i pointerleave persi (mouse veloce, item
     // ridisegnato da vis-timeline mentre è sotto al cursore, uscita dalla finestra).
@@ -456,6 +479,8 @@
 
                 const contentEl = getLiveContentEl(itemEl);
                 if (!contentEl) return;
+
+                clampShiftedContentWidth(contentEl);
 
                 if (!itemEl.dataset.itemId) return;
 
@@ -584,6 +609,9 @@
                 if (group && e.relatedTarget && group.contains(e.relatedTarget))
                     return;
 
+                if (!itemEl.matches(':hover'))
+                    resetShiftedContentWidth(contentEl);
+
                 clearTimeout(timers.hide);
 
                 timers.hide = setTimeout(function()
@@ -663,6 +691,14 @@
                         return;
 
                     group.remove();
+                });
+
+                // Rete di sicurezza: ripristina la larghezza dei contenuti
+                // clampati il cui item non è più in hover (pointerleave perso).
+                document.querySelectorAll('#timelinecontainer .vis-item-content').forEach(function(contentEl)
+                {
+                    if (contentEl.style.width && !contentEl.closest('.vis-item')?.matches(':hover'))
+                        contentEl.style.width = '';
                 });
             });
         }
