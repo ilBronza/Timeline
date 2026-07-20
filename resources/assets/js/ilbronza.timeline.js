@@ -394,30 +394,84 @@
 
 
     // --- LIVE button inside timeline-item on hover (direct binding) ---
-    let liveItemTimer = null;
-    let liveItemHideTimer = null;
+    const LIVE_GROUP_SELECTOR = '.timeline-live-inline-group';
+
+    // Timer per singolo item: usare variabili condivise faceva sì che
+    // l'hover su un item annullasse il timer di nascondimento di un altro,
+    // lasciando i pulsanti appesi.
+    const liveItemTimers = new WeakMap();
+
+    function getLiveTimers(itemEl)
+    {
+        let timers = liveItemTimers.get(itemEl);
+
+        if (!timers)
+        {
+            timers = { show: null, hide: null };
+            liveItemTimers.set(itemEl, timers);
+        }
+
+        return timers;
+    }
+
+    function getLiveContentEl(itemEl)
+    {
+        return itemEl.closest('.vis-item')?.querySelector('.vis-item-content') || null;
+    }
+
+    // Rimuove tutti i gruppi di pulsanti tranne quello passato come eccezione.
+    // È la rete di sicurezza per i pointerleave persi (mouse veloce, item
+    // ridisegnato da vis-timeline mentre è sotto al cursore, uscita dalla finestra).
+    function removeAllLiveGroups(exceptGroup)
+    {
+        if (window.isTimelineLightboxOpen())
+            return;
+
+        document.querySelectorAll(LIVE_GROUP_SELECTOR).forEach(function(group)
+        {
+            if (exceptGroup && group === exceptGroup)
+                return;
+
+            group.remove();
+        });
+    }
 
     function attachLiveHoverHandlers()
     {
         document.querySelectorAll('#timelinecontainer .timeline-item').forEach(function(itemEl)
         {
+            // Evita di riagganciare i listener a ogni mutazione del DOM:
+            // vis-timeline ridisegna di continuo e i listener si accumulavano.
+            if (itemEl.dataset.liveHoverBound === '1')
+                return;
+
+            itemEl.dataset.liveHoverBound = '1';
+
             itemEl.addEventListener('pointerenter', function(ev)
             {
-                clearTimeout(liveItemTimer);
-                clearTimeout(liveItemHideTimer);
+                const timers = getLiveTimers(itemEl);
 
-                const contentEl = itemEl.closest('.vis-item')?.querySelector('.vis-item-content');
+                clearTimeout(timers.show);
+                clearTimeout(timers.hide);
+
+                const contentEl = getLiveContentEl(itemEl);
                 if (!contentEl) return;
 
                 if (!itemEl.dataset.itemId) return;
+
+                // Entrando su un item, ripulisce i pulsanti rimasti su altri item.
+                removeAllLiveGroups(contentEl.querySelector(LIVE_GROUP_SELECTOR));
 
                 const changeSupplierUrl = itemEl.dataset.changeSupplierUrl || null;
                 const rect = contentEl.getBoundingClientRect();
                 const initialOffsetX = ev.clientX - rect.left;
 
-                liveItemTimer = setTimeout(function()
+                timers.show = setTimeout(function()
                 {
-                    if (contentEl.querySelector('.timeline-live-inline-group')) return;
+                    if (contentEl.querySelector(LIVE_GROUP_SELECTOR)) return;
+
+                    // Se nel frattempo il mouse non è più sull'item, non mostrare nulla.
+                    if (!itemEl.matches(':hover')) return;
 
                     const group = document.createElement('div');
                     group.className = 'timeline-live-inline-group';
@@ -458,65 +512,95 @@
 
                     group.addEventListener('pointerenter', function()
                     {
-                        clearTimeout(liveItemHideTimer);
+                        clearTimeout(timers.hide);
                     });
 
-                    group.addEventListener('pointerleave', function()
+                    group.addEventListener('pointerleave', function(e)
                     {
-                        clearTimeout(liveItemHideTimer);
+                        clearTimeout(timers.hide);
 
-                        liveItemHideTimer = setTimeout(function()
+                        if (e.relatedTarget && itemEl.contains(e.relatedTarget))
+                            return;
+
+                        timers.hide = setTimeout(function()
                         {
                             if (window.isTimelineLightboxOpen())
                                 return;
 
+                            if (group.matches(':hover') || itemEl.matches(':hover'))
+                                return;
+
                             if (group.parentNode)
                                 group.remove();
-                        }, 700);
+                        }, 400);
                     });
 
                     if (getComputedStyle(contentEl).position === 'static')
                         contentEl.style.position = 'relative';
 
+                    // Appeso invisibile per poterlo misurare davvero: la larghezza
+                    // stimata a mano faceva sbordare il gruppo oltre il bordo destro
+                    // dell'item e, con .vis-item-overflow:hover { overflow: visible },
+                    // la timeline si allungava verso destra.
+                    group.style.visibility = 'hidden';
+                    group.style.left = '0px';
+                    group.style.top = '2px';
+
                     contentEl.appendChild(group);
 
                     const contentWidth = contentEl.offsetWidth;
-                    const btnWidth = changeSupplierUrl ? 60 : 28;
+                    const groupWidth = group.offsetWidth || (changeSupplierUrl ? 60 : 28);
 
                     let computedLeft = initialOffsetX + 10;
 
-                    if (computedLeft + btnWidth > contentWidth)
-                        computedLeft = contentWidth - btnWidth - 4;
+                    // Non deve mai uscire dal box dell'item.
+                    const maxLeft = Math.max(0, contentWidth - groupWidth - 4);
+
+                    if (computedLeft > maxLeft)
+                        computedLeft = maxLeft;
 
                     if (computedLeft < 2)
                         computedLeft = 2;
 
                     group.style.left = computedLeft + 'px';
-                    group.style.top = '2px';
+                    group.style.maxWidth = Math.max(0, contentWidth - computedLeft) + 'px';
+                    group.style.overflow = 'hidden';
+                    group.style.visibility = '';
 
                 }, 250);
             });
             itemEl.addEventListener('pointerleave', function(e)
             {
-                const contentEl = itemEl.closest('.vis-item')?.querySelector('.vis-item-content');
+                const timers = getLiveTimers(itemEl);
+
+                // Uscendo dall'item si annulla anche l'eventuale comparsa pendente.
+                clearTimeout(timers.show);
+
+                const contentEl = getLiveContentEl(itemEl);
                 if (!contentEl) return;
 
-                const group = contentEl.querySelector('.timeline-live-inline-group');
+                const group = contentEl.querySelector(LIVE_GROUP_SELECTOR);
 
                 if (group && e.relatedTarget && group.contains(e.relatedTarget))
                     return;
 
-                clearTimeout(liveItemHideTimer);
+                clearTimeout(timers.hide);
 
-                liveItemHideTimer = setTimeout(function()
+                timers.hide = setTimeout(function()
                 {
                     if (window.isTimelineLightboxOpen())
                         return;
 
-                    const currentGroup = contentEl.querySelector('.timeline-live-inline-group');
-                    if (currentGroup)
-                        currentGroup.remove();
-                }, 700);
+                    const currentGroup = contentEl.querySelector(LIVE_GROUP_SELECTOR);
+
+                    if (!currentGroup)
+                        return;
+
+                    if (currentGroup.matches(':hover') || itemEl.matches(':hover'))
+                        return;
+
+                    currentGroup.remove();
+                }, 400);
             });
         });
     }
@@ -524,12 +608,79 @@
     // Attach after each render/update
     if (container)
     {
-        const observer = new MutationObserver(function()
+        let attachScheduled = false;
+
+        const observer = new MutationObserver(function(mutations)
         {
-            attachLiveHoverHandlers();
+            // Ignora le mutazioni generate dai pulsanti stessi, altrimenti
+            // l'observer si auto-rilancia a ogni hover.
+            const relevant = mutations.some(function(m)
+            {
+                return !(m.target.closest && m.target.closest(LIVE_GROUP_SELECTOR));
+            });
+
+            if (!relevant || attachScheduled)
+                return;
+
+            attachScheduled = true;
+
+            requestAnimationFrame(function()
+            {
+                attachScheduled = false;
+                attachLiveHoverHandlers();
+            });
         });
 
         observer.observe(container, { childList: true, subtree: true });
+
+        // Rete di sicurezza: se il puntatore non è più sopra né ai pulsanti né
+        // al loro item (pointerleave perso, item ridisegnato, drag della timeline),
+        // i pulsanti vengono rimossi comunque.
+        let sweepScheduled = false;
+
+        function sweepOrphanLiveGroups()
+        {
+            if (sweepScheduled)
+                return;
+
+            sweepScheduled = true;
+
+            requestAnimationFrame(function()
+            {
+                sweepScheduled = false;
+
+                if (window.isTimelineLightboxOpen())
+                    return;
+
+                document.querySelectorAll(LIVE_GROUP_SELECTOR).forEach(function(group)
+                {
+                    const visItem = group.closest('.vis-item');
+
+                    if (group.matches(':hover'))
+                        return;
+
+                    if (visItem && visItem.matches(':hover'))
+                        return;
+
+                    group.remove();
+                });
+            });
+        }
+
+        document.addEventListener('pointermove', function(e)
+        {
+            if (!document.querySelector(LIVE_GROUP_SELECTOR))
+                return;
+
+            if (e.target.closest && e.target.closest(LIVE_GROUP_SELECTOR))
+                return;
+
+            sweepOrphanLiveGroups();
+        }, true);
+
+        container.addEventListener('pointerleave', sweepOrphanLiveGroups);
+        container.addEventListener('wheel', sweepOrphanLiveGroups, { passive: true });
+        window.addEventListener('blur', sweepOrphanLiveGroups);
     }
 
     // Delegated handler for group buttons/links rendered by groupTemplate
