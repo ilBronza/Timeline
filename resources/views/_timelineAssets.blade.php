@@ -1,3 +1,10 @@
-<link rel="stylesheet" href="{{ asset(config('timeline.assets.css')) }}">
+@php
+	$timelineAssetVersion = function (string $path) {
+		$fullPath = public_path($path);
+
+		return asset($path) . (is_file($fullPath) ? '?v=' . filemtime($fullPath) : '');
+	};
+@endphp
+<link rel="stylesheet" href="{{ $timelineAssetVersion(config('timeline.assets.css')) }}">
 @include('timeline::_timelineConfig')
-<script src="{{ asset(config('timeline.assets.js')) }}" defer></script>
+<script src="{{ $timelineAssetVersion(config('timeline.assets.js')) }}" defer></script>
