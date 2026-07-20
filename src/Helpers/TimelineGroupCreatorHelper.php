@@ -20,6 +20,13 @@ class TimelineGroupCreatorHelper
 
 		$timelineGroup->actions = $model->getTimelineGroupActions();
 
+		$timelineGroup->actions[] = [
+			'action' => 'open',
+			'faIcon' => 'chart-gantt',
+			'title' => 'Gantt ' . $model->getTimelineGroupName(),
+			'url' => $model->getTimelineGroupGanttUrl()
+		];
+
 		$stylesString = [];
 
 		foreach($timelineGroup->cssStyles as $name => $parameters)

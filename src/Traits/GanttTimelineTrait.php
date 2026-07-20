@@ -6,11 +6,24 @@ use IlBronza\Buttons\Button;
 
 trait GanttTimelineTrait
 {
+	public function getGanttButtonText() : string
+	{
+		$pieces = [trans('crud::fields.gantt')];
+
+		if(method_exists($this, 'getTranslatedClassname'))
+			$pieces[] = $this->getTranslatedClassname();
+
+		if((method_exists($this, 'getName')) && ($name = $this->getName()))
+			$pieces[] = $name;
+
+		return implode(' ', $pieces);
+	}
+
 	public function getGanttButton() : Button
 	{
 		return Button::create([
 			'href' => $this->getGanttUrl(),
-			'text' => 'crud::fields.gantt',// qua il nome deve riportare gantt by qualcosa
+			'translatedText' => $this->getGanttButtonText(),
 			'icon' => 'chart-gantt'
 		]);
 	}

@@ -41,15 +41,16 @@ trait IsTimelineGroupTrait
 		];
 	}
 
+	//il pulsante gantt viene sempre aggiunto da TimelineGroupCreatorHelper
+	//usando getTimelineGroupGanttUrl(),
+	//qua vanno solo eventuali actions extra del singolo model
 	public function getTimelineGroupActions() : array
 	{
-		return [
-			[
-				'action' => 'open',
-				'faIcon' => 'chart-gantt',
-				'title' => 'Gantt ' . $this->getTimelineGroupName(),
-				'url' => $this->getGanttUrl()
-			]
-		];
+		return [];
+	}
+
+	public function getTimelineGroupGanttUrl() : string
+	{
+		return $this->getGanttUrl();
 	}
 }
