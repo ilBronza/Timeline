@@ -541,6 +541,7 @@
 
                 const changeSupplierUrl = itemEl.dataset.changeSupplierUrl || null;
                 const splitUrl = itemEl.dataset.splitUrl || null;
+                const weekendSplitUrl = itemEl.dataset.weekendSplitUrl || null;
                 const rect = contentEl.getBoundingClientRect();
                 const initialOffsetX = ev.clientX - rect.left;
 
@@ -600,6 +601,18 @@
                         group.appendChild(splitWrapper);
                     }
 
+                    if (weekendSplitUrl)
+                    {
+                        const weekendSplitWrapper = window.createTimelineIframeLinkElement({
+                            url: weekendSplitUrl,
+                            faIcon: 'calendar-week',
+                            title: itemEl.dataset.weekendSplitText || 'Dividi sui week-end',
+                        });
+
+                        weekendSplitWrapper.classList.add('timeline-live-inline');
+                        group.appendChild(weekendSplitWrapper);
+                    }
+
                     group.addEventListener('pointerenter', function()
                     {
                         clearTimeout(timers.hide);
@@ -639,7 +652,7 @@
                     contentEl.appendChild(group);
 
                     const contentWidth = contentEl.offsetWidth;
-                    const groupWidth = group.offsetWidth || (28 + (changeSupplierUrl ? 32 : 0) + (splitUrl ? 32 : 0));
+                    const groupWidth = group.offsetWidth || (28 + (changeSupplierUrl ? 32 : 0) + (splitUrl ? 32 : 0) + (weekendSplitUrl ? 32 : 0));
 
                     let computedLeft = initialOffsetX + 10;
 
@@ -1250,6 +1263,18 @@ var options = {
 
                 if (splitLink.text)
                     wrapper.dataset.splitText = splitLink.text;
+            }
+
+            // Split week-end (calendar-week): stesso meccanismo del link split.
+            const weekendSplitLink = [...(Array.isArray(item.rightLinks) ? item.rightLinks : []), ...(Array.isArray(item.links) ? item.links : [])]
+                .find(function (link) { return link.faIcon === 'calendar-week'; });
+
+            if (weekendSplitLink?.url)
+            {
+                wrapper.dataset.weekendSplitUrl = weekendSplitLink.url;
+
+                if (weekendSplitLink.text)
+                    wrapper.dataset.weekendSplitText = weekendSplitLink.text;
             }
 
             wrapper.innerHTML = `
