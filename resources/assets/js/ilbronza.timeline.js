@@ -488,6 +488,7 @@
                 removeAllLiveGroups(contentEl.querySelector(LIVE_GROUP_SELECTOR));
 
                 const changeSupplierUrl = itemEl.dataset.changeSupplierUrl || null;
+                const splitUrl = itemEl.dataset.splitUrl || null;
                 const rect = contentEl.getBoundingClientRect();
                 const initialOffsetX = ev.clientX - rect.left;
 
@@ -535,6 +536,18 @@
                         group.appendChild(shuffleWrapper);
                     }
 
+                    if (splitUrl)
+                    {
+                        const splitWrapper = window.createTimelineIframeLinkElement({
+                            url: splitUrl,
+                            faIcon: 'scissors',
+                            title: itemEl.dataset.splitText || 'Dividi',
+                        });
+
+                        splitWrapper.classList.add('timeline-live-inline');
+                        group.appendChild(splitWrapper);
+                    }
+
                     group.addEventListener('pointerenter', function()
                     {
                         clearTimeout(timers.hide);
@@ -574,7 +587,7 @@
                     contentEl.appendChild(group);
 
                     const contentWidth = contentEl.offsetWidth;
-                    const groupWidth = group.offsetWidth || (changeSupplierUrl ? 60 : 28);
+                    const groupWidth = group.offsetWidth || (28 + (changeSupplierUrl ? 32 : 0) + (splitUrl ? 32 : 0));
 
                     let computedLeft = initialOffsetX + 10;
 
@@ -1172,6 +1185,20 @@ var options = {
 
             if (changeSupplierLink?.url)
                 wrapper.dataset.changeSupplierUrl = changeSupplierLink.url;
+
+            // Split link (scissors) esposto sul wrapper per i pulsanti live in hover.
+            // Viene cercato sia nei rightLinks che nei links, così qualsiasi model
+            // che lo dichiara lo rende disponibile su ogni timeline.
+            const splitLink = [...(Array.isArray(item.rightLinks) ? item.rightLinks : []), ...(Array.isArray(item.links) ? item.links : [])]
+                .find(function (link) { return link.faIcon === 'scissors'; });
+
+            if (splitLink?.url)
+            {
+                wrapper.dataset.splitUrl = splitLink.url;
+
+                if (splitLink.text)
+                    wrapper.dataset.splitText = splitLink.text;
+            }
 
             wrapper.innerHTML = `
                 <strong ${tooltip}>${item.title}</strong>
