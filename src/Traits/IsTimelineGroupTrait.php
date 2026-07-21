@@ -53,4 +53,12 @@ trait IsTimelineGroupTrait
 	{
 		return $this->getGanttUrl();
 	}
+
+	public function getTimelineGroupModalUrl() : ? string
+	{
+		return route('timeline.groupModal', [
+			'model' => $this->getMorphClass(),
+			'key' => $this->getKey(),
+		]);
+	}
 }

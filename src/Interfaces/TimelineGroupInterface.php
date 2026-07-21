@@ -17,4 +17,6 @@ interface TimelineGroupInterface
 	public function getTimelineGroupActions() : array;
 
 	public function getTimelineGroupGanttUrl() : string;
+
+	public function getTimelineGroupModalUrl() : ? string;
 }

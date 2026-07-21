@@ -15,6 +15,7 @@ class TimelineGroupCreatorHelper
 		$timelineGroup->cssStyles = $model->getTimelineGroupCssStyles();
 
 		$timelineGroup->name = $model->getTimelineGroupName();
+		$timelineGroup->modalUrl = $model->getTimelineGroupModalUrl();
 
 		$timelineGroup->htmlClasses = $model->getTimelineGroupHtmlClasses();
 

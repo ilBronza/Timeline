@@ -1,5 +1,5 @@
-<div class="uk-margin-small-bottom uk-text-right">
-	<button type="button" class="uk-button uk-button-default uk-button-small" uk-toggle="target: #timeline-groups-filter-modal">
+<div id="timeline-groups-filter-toolbar" class="uk-margin-small-bottom" style="width: 25%;">
+	<button type="button" class="uk-button uk-button-default uk-button-small uk-width-1-1 uk-text-left" uk-toggle="target: #timeline-groups-filter-modal">
 		<i class="fa fa-filter"></i> Gruppi
 		<span id="timeline-groups-filter-badge" class="uk-badge" hidden></span>
 	</button>

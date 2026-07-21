@@ -37,7 +37,10 @@
                 e.preventDefault();
                 e.stopPropagation();
 
-                clearTimeout(liveItemHideTimer);
+                const itemEl = wrapper.closest('.vis-item');
+
+                if (itemEl)
+                    clearTimeout(getLiveTimers(itemEl).hide);
 
                 if (typeof UIkit !== 'undefined' && UIkit.lightboxPanel)
                 {
@@ -208,6 +211,55 @@
         });
 
         const response = await fetch(itemModalUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'text/html',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+
+        modalContent.innerHTML = await response.text();
+
+        if (typeof UIkit !== 'undefined' && typeof UIkit.update === 'function')
+            UIkit.update(modalContent);
+    };
+
+    window.openTimelineGroupModal = async function(button)
+    {
+        const groupId = button.dataset.groupId;
+        if (!groupId) return;
+
+        const group = groups.get(groupId);
+        if (!group || !group.modalUrl) return;
+
+        const template = document.getElementById('timeline-item-modal-template');
+        if (!template) return;
+
+        const clone = template.firstElementChild.cloneNode(true);
+        const modalId = 'timeline-group-modal-' + Date.now();
+        clone.id = modalId;
+
+        const modalContent = clone.querySelector('.timeline-modal-content');
+        const modalTitleEl = clone.querySelector('.uk-modal-title');
+        const modalFooter = clone.querySelector('.uk-card-footer');
+
+        modalTitleEl.textContent = group.name ?? group.content ?? window.timelineDefaultTitle;
+        modalContent.innerHTML = '<div class="uk-text-center uk-padding"><div uk-spinner></div></div>';
+
+        if (modalFooter)
+            modalFooter.remove();
+
+        document.body.appendChild(clone);
+
+        const modal = UIkit.modal('#' + modalId);
+        modal.show();
+
+        clone.addEventListener('hidden', function () {
+            modal.$destroy(true);
+            clone.remove();
+        });
+
+        const response = await fetch(group.modalUrl, {
             method: 'GET',
             headers: {
                 'Accept': 'text/html',
@@ -1288,11 +1340,23 @@ var options = {
             const formatDate = d =>
                 d ? `${d.toLocaleDateString()} ${d.toLocaleTimeString().slice(0,5)}` : '—';
 
+            const modalActionHtml = group.modalUrl ? `
+                        <button
+                            type="button"
+                            class="uk-button uk-button-default uk-button-small timeline-group-modal-trigger"
+                            title="Riepilogo ${title}"
+                            data-group-id="${group.id}"
+                        >
+                            <i class="fa fa-link"></i>
+                        </button>
+            ` : '';
+
             wrapper.innerHTML = `
 				<div class="uk-flex uk-flex-middle uk-flex-between uk-margin-small-bottom">
 					<div class="timeline-group-title">${title}</div>
 
 					<div class="timeline-group-actions uk-grid-small uk-child-width-auto" uk-grid>
+                        ${modalActionHtml}
                         <button
                             type="button"
                             class="uk-button uk-button-default uk-button-small timeline-group-summary-toggle"
@@ -1317,6 +1381,16 @@ var options = {
                     <div><strong>Missing operator:</strong> ${missingOperatorCount}</div>
                 </div>
 `;
+
+            const modalBtn = wrapper.querySelector('.timeline-group-modal-trigger');
+
+            if (modalBtn)
+            {
+                modalBtn.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                    window.openTimelineGroupModal(modalBtn);
+                });
+            }
 
             // Recalculate group height after UIkit toggle animation
             const toggleBtn = wrapper.querySelector('.timeline-group-summary-toggle');
@@ -1422,6 +1496,30 @@ var options = {
         window.location.pathname,
         window.location.search
     ].join(':');
+
+    function syncTimelineGroupsFilterWidth()
+    {
+        const filterToolbar = document.getElementById('timeline-groups-filter-toolbar');
+        const groupsColumn = document.querySelector('#timelinecontainer .vis-left');
+
+        if (! filterToolbar || ! groupsColumn)
+            return;
+
+        const groupsWidth = groupsColumn.getBoundingClientRect().width;
+
+        if (groupsWidth > 0)
+            filterToolbar.style.width = groupsWidth + 'px';
+    }
+
+    function scheduleTimelineGroupsFilterWidthSync()
+    {
+        if (typeof window.requestAnimationFrame === 'function')
+            window.requestAnimationFrame(syncTimelineGroupsFilterWidth);
+        else
+            setTimeout(syncTimelineGroupsFilterWidth, 0);
+    }
+
+    window.addEventListener('resize', scheduleTimelineGroupsFilterWidthSync);
 
     function getHiddenGroupIds()
     {
@@ -1565,6 +1663,7 @@ var options = {
             groups.update(data.groups);
 
             renderTimelineGroupsFilterList();
+            scheduleTimelineGroupsFilterWidthSync();
         }
 
         if (data.items)
@@ -1611,6 +1710,7 @@ var options = {
             var timelineOptions = Object.assign({}, options, { start: windowStart, end: windowEnd });
             timeline = new vis.Timeline(container, items, groups, timelineOptions);
             window.timeline = timeline;
+            scheduleTimelineGroupsFilterWidthSync();
 
             timeline.on('doubleClick', async function (properties)
             {
@@ -1719,6 +1819,7 @@ var options = {
         else if (currentWindow)
         {
             timeline.setWindow(currentWindow.start, currentWindow.end, {animation: false});
+            scheduleTimelineGroupsFilterWidthSync();
         }
     }
 

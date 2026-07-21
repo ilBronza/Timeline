@@ -106,6 +106,36 @@ abstract class BaseTimelineController extends CRUD
 		return $this->sendResponse();
 	}
 
+	public function getSubgroupsTimelineData()
+	{
+		$this->createGroupsByCollection($this->getSubgroupsTimelineGroups());
+		$this->createItemsByCollectionAndGetter(
+			$this->getSubgroupsTimelineItems(),
+			$this->getSubgroupsTimelineGroupGetter()
+		);
+
+		return $this->sendResponse();
+	}
+
+	/*
+	 * Controllers can override these hooks to provide their own subgroup data
+	 * without reimplementing the common timeline response.
+	 */
+	protected function getSubgroupsTimelineGroups() : Collection
+	{
+		return collect();
+	}
+
+	protected function getSubgroupsTimelineItems() : Collection
+	{
+		return collect();
+	}
+
+	protected function getSubgroupsTimelineGroupGetter() : string
+	{
+		return 'getSubgroupTimelineGroup';
+	}
+
 	public function sendResponse()
 	{
 		return [

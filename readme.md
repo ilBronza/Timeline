@@ -121,6 +121,15 @@ class Order extends Model implements TimelineGroupInterface, GanttTimelineInterf
 }
 ```
 
+`IsTimelineGroupTrait` also adds a `modalUrl` to every group. The group summary
+button loads `timeline.groupModal`, which resolves the group model and picks the
+view by package/model: `{package}::{camelModel}.timeline._groupModal` if it
+exists, otherwise `timeline::group-modal`. Items work the same way with
+`{package}::{camelModel}.timeline._modal` / `timeline::modal`.
+
+Group modal buttons come from `getTimelineGroupModalButtons()` if defined on the
+model, falling back to `getTimelineModalButtons()`.
+
 ### Controllers
 
 ```php
@@ -142,6 +151,28 @@ class OrderTimelineController extends BaseTimelineController
 
         return $this->sendResponse();
     }
+}
+```
+
+### Subgroup timelines
+
+`timeline('subgroups')` invokes `getSubgroupsTimelineData()`. Controllers can
+override the protected subgroup hooks to supply their own data:
+
+```php
+protected function getSubgroupsTimelineGroups() : Collection
+{
+    return $this->getModel()->subgroups;
+}
+
+protected function getSubgroupsTimelineItems() : Collection
+{
+    return $this->getModel()->rows;
+}
+
+protected function getSubgroupsTimelineGroupGetter() : string
+{
+    return 'getSubgroupTimelineGroup';
 }
 ```
 

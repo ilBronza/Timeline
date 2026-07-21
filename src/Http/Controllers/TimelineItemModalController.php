@@ -27,9 +27,19 @@ class TimelineItemModalController extends CRUD
 		}
 	}
 
+	public function getCustomModalViewSuffix() : string
+	{
+		return 'timeline._modal';
+	}
+
+	public function getFallbackModalViewName() : string
+	{
+		return 'timeline::modal';
+	}
+
 	public function getModalViewName(Model $model) : string
 	{
-		$viewName = Str::camel(class_basename($model)) . '.timeline._modal';
+		$viewName = Str::camel(class_basename($model)) . '.' . $this->getCustomModalViewSuffix();
 
 		if($packageName = $this->getModelPackageName($model))
 			$viewName = "{$packageName}::{$viewName}";
@@ -37,7 +47,7 @@ class TimelineItemModalController extends CRUD
 		if(view()->exists($viewName))
 			return $viewName;
 
-		return 'timeline::modal';
+		return $this->getFallbackModalViewName();
 	}
 
 	public function getModalButtons(Model $model) : Collection

@@ -8,6 +8,7 @@ class TimelineGroup
 	public string $content;
 	public string $name;
 	public string $style = '';
+	public ?string $modalUrl = null;
 
 	public array $cssStyles = [];
 	public array $htmlClasses = [];
