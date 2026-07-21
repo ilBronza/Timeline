@@ -1458,59 +1458,72 @@ var options = {
         step: options.timeAxis.step,
     };
 
-    function addWeekendBackgrounds(timeline, items) {
+    function generateTimelineWeekendBackgrounds(start, end) {
+        const bg = [];
 
-        function generateWeekends(start, end) {
-            const bg = [];
+        // clona le date per sicurezza
+        const d = new Date(start);
+        d.setHours(0,0,0,0); // 🔥 normalizza a mezzanotte
 
-            // clona le date per sicurezza
-            const d = new Date(start);
-            d.setHours(0,0,0,0); // 🔥 normalizza a mezzanotte
+        const endDate = new Date(end);
+        endDate.setHours(0,0,0,0);
 
-            const endDate = new Date(end);
-            endDate.setHours(0,0,0,0);
+        while (d < endDate) {
+            const dow = d.getDay(); // 0 = domenica, 6 = sabato
 
-            while (d < endDate) {
-                const dow = d.getDay(); // 0 = domenica, 6 = sabato
+            if (dow === 0 || dow === 6) {
 
-                if (dow === 0 || dow === 6) {
+                const next = new Date(d);
+                next.setDate(next.getDate() + 1);
+                next.setHours(0,0,0,0); // 🔥 anche l’end deve essere mezzanotte
 
-                    const next = new Date(d);
-                    next.setDate(next.getDate() + 1);
-                    next.setHours(0,0,0,0); // 🔥 anche l’end deve essere mezzanotte
-
-                    bg.push({
-                        id: 'weekend-' + d.toISOString(),
-                        start: new Date(d),
-                        end: next,
-                        type: 'background',
-                        className: dow === 6 ? 'weekend-saturday' : 'weekend-sunday'
-                    });
-                }
-
-                d.setDate(d.getDate() + 1);
-                d.setHours(0,0,0,0); // 🔥 importantissimo
+                bg.push({
+                    id: 'weekend-' + d.toISOString(),
+                    start: new Date(d),
+                    end: next,
+                    type: 'background',
+                    className: dow === 6 ? 'weekend-saturday' : 'weekend-sunday'
+                });
             }
 
-            return bg;
+            d.setDate(d.getDate() + 1);
+            d.setHours(0,0,0,0); // 🔥 importantissimo
         }
 
+        return bg;
+    }
+
+    // Rimuove e ricrea gli sfondi week-end sulla finestra corrente.
+    // Va richiamata anche dopo ogni refresh dei dati: items.clear()
+    // (setTimelineData) cancella pure i background, e senza zoom/pan
+    // nessun rangechanged li avrebbe ricreati.
+    function regenerateTimelineWeekendBackgrounds(start, end) {
+        if (! timeline)
+            return;
+
+        items.forEach(i => {
+            if (i.type === 'background' && i.className?.startsWith('weekend')) {
+                items.remove(i.id);
+            }
+        });
+
+        if (! start || ! end) {
+            const range = timeline.getWindow();
+            start = range.start;
+            end = range.end;
+        }
+
+        items.add(generateTimelineWeekendBackgrounds(start, end));
+    }
+
+    function addWeekendBackgrounds(timeline, items) {
+
         // prima generazione
-        const range = timeline.getWindow();
-        items.add(generateWeekends(range.start, range.end));
+        regenerateTimelineWeekendBackgrounds();
 
         // rigenera quando l’utente fa zoom o pan
         timeline.on('rangechanged', function (props) {
-
-            // elimina i vecchi weekend
-            items.forEach(i => {
-                if (i.type === 'background' && i.className?.startsWith('weekend')) {
-                    items.remove(i.id);
-                }
-            });
-
-            // aggiungi i nuovi
-            items.add(generateWeekends(props.start, props.end));
+            regenerateTimelineWeekendBackgrounds(props.start, props.end);
         });
     }
 
@@ -1695,6 +1708,10 @@ var options = {
         {
             items.clear();
             items.update(data.items);
+
+            // items.clear() ha cancellato anche gli sfondi week-end:
+            // se la timeline esiste già va rigenerati subito.
+            regenerateTimelineWeekendBackgrounds();
         }
 
         // Create the timeline only once; subsequent calls only update datasets
