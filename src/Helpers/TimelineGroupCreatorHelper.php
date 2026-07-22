@@ -6,11 +6,15 @@ use IlBronza\Timeline\Interfaces\TimelineGroupInterface;
 
 class TimelineGroupCreatorHelper
 {
-	static function createGroupByModel(TimelineGroupInterface $model) : TimelineGroup
+	static function createGroupByModel(TimelineGroupInterface $model, bool $withGantt = true) : TimelineGroup
 	{
 		$timelineGroup = new TimelineGroup();
 
 		$timelineGroup->id = $model->getTimelineGroupId();
+		$timelineGroup->model = $model->getMorphClass();
+
+		$timelineGroup->key = $model->getKey();
+
 		$timelineGroup->content = $model->getTimelineGroupContent();
 		$timelineGroup->cssStyles = $model->getTimelineGroupCssStyles();
 
@@ -21,12 +25,13 @@ class TimelineGroupCreatorHelper
 
 		$timelineGroup->actions = $model->getTimelineGroupActions();
 
-		$timelineGroup->actions[] = [
-			'action' => 'open',
-			'faIcon' => 'chart-gantt',
-			'title' => 'Gantt ' . $model->getTimelineGroupName(),
-			'url' => $model->getTimelineGroupGanttUrl()
-		];
+		if($withGantt)
+			$timelineGroup->actions[] = [
+				'action' => 'open',
+				'faIcon' => 'chart-gantt',
+				'title' => 'Gantt ' . $model->getTimelineGroupName(),
+				'url' => $model->getTimelineGroupGanttUrl()
+			];
 
 		$stylesString = [];
 

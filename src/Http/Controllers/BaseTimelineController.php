@@ -67,10 +67,25 @@ abstract class BaseTimelineController extends CRUD
 		return 'get' . Str::studly($option) . 'TimelineData';
 	}
 
-	public function createGroupsByCollection(Collection $elements)
+	public function createGroupsByCollection(Collection $elements, ?bool $withGantt = null)
 	{
+		$nestedGroupIds = collect($this->groups)
+			->flatMap(function($group)
+			{
+				if(is_array($group))
+					return $group['nestedGroups'] ?? [];
+
+				return $group->nestedGroups ?? [];
+			})
+			->map(fn($groupId) => (string) $groupId)
+			->flip();
+
 		foreach($elements as $element)
-			$this->groups[] = TimelineGroupCreatorHelper::createGroupByModel($element);
+		{
+			$includeGantt = $withGantt ?? ! $nestedGroupIds->has((string) $element->getTimelineGroupId());
+
+			$this->groups[] = TimelineGroupCreatorHelper::createGroupByModel($element, $includeGantt);
+		}
 	}
 
 	public function createItemsByCollection(Collection $elements)
@@ -108,7 +123,7 @@ abstract class BaseTimelineController extends CRUD
 
 	public function getSubgroupsTimelineData()
 	{
-		$this->createGroupsByCollection($this->getSubgroupsTimelineGroups());
+		$this->createGroupsByCollection($this->getSubgroupsTimelineGroups(), false);
 		$this->createItemsByCollectionAndGetter(
 			$this->getSubgroupsTimelineItems(),
 			$this->getSubgroupsTimelineGroupGetter()

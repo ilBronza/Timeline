@@ -20,3 +20,21 @@
 #timelinecontainer .vis-item.vis-selected .timeline-item:active {
     cursor: grabbing;
 }
+
+#timelinecontainer .vis-label.vis-nesting-group {
+  position: relative;
+}
+
+#timelinecontainer .vis-label.vis-nesting-group::before {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  transform: translateY(-50%);
+  width: auto;
+  height: auto;
+  line-height: 1;
+}
+
+#timelinecontainer .vis-label.vis-nesting-group > .vis-inner {
+  padding-left: 22px !important;
+}

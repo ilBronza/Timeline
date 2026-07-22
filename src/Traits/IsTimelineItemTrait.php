@@ -37,6 +37,13 @@ trait IsTimelineItemTrait
 		return class_basename($this) . '-' . class_basename($groupModel);
 	}
 
+	public function getTimelineItemTitle(? TimelineGroupInterface $groupModel) : string
+	{
+		$method = 'getTimelineItemTitleFor' . class_basename($groupModel);
+
+		return $this->{$method}($groupModel);
+	}
+
 	public function getTimelineItemEndsAt(? TimelineGroupInterface $groupModel) : Carbon
 	{
 		return $this->getEndsAt() ?? Carbon::now()->addDays(3);

@@ -15,6 +15,7 @@ interface TimelineGroupInterface
 	public function getTimelineGroupHtmlClasses() : array;
 
 	public function getTimelineGroupActions() : array;
+	public function getTimelineBindingDataArray() : array;
 
 	public function getTimelineGroupGanttUrl() : string;
 

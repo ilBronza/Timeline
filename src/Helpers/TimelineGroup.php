@@ -5,6 +5,8 @@ namespace IlBronza\Timeline\Helpers;
 class TimelineGroup
 {
 	public string $id;
+	public ?string $model = null;
+	public string|int|null $key = null;
 	public string $content;
 	public string $name;
 	public string $style = '';

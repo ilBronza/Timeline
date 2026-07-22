@@ -274,6 +274,16 @@
     };
 
     window.addEventListener('sis-lightboxClosed', function() {
+        // Il pannello .uk-lightbox.uk-open resta nel DOM dopo la chiusura
+        // dell'iframe: isTimelineLightboxOpen() rimarrebbe true per sempre,
+        // bloccando ogni rimozione dei pulsanti live.
+        document.querySelectorAll('.uk-lightbox').forEach(function(panel)
+        {
+            panel.remove();
+        });
+
+        removeAllLiveGroups();
+
         window.fetchTimeline();
     });
 
@@ -443,6 +453,7 @@
     var items = new vis.DataSet([]);
     var groups = new vis.DataSet([]);
     var timeline = null;
+    var timelineAutomaticallyHiddenGroupIds = new Set();
 
 
     // --- LIVE button inside timeline-item on hover (direct binding) ---
@@ -466,32 +477,105 @@
         return timers;
     }
 
-    function getLiveContentEl(itemEl)
+    function getLiveGroupForItem(itemEl)
     {
-        return itemEl.closest('.vis-item')?.querySelector('.vis-item-content') || null;
+        return Array.from(document.querySelectorAll(LIVE_GROUP_SELECTOR))
+            .find(group => group._timelineItemEl === itemEl) || null;
     }
 
-    // Con .vis-item-overflow:hover { overflow: visible }, il contenuto degli
-    // item traslati da vis (translateX applicato per tenere visibile il titolo
-    // quando l'item inizia prima della finestra) sbordava a destra della barra
-    // per l'intera traslazione: la barra colorata si "allungava" in hover.
-    // Riducendo la larghezza dello stesso shift, il contenuto termina esattamente
-    // al bordo destro dell'item.
-    function clampShiftedContentWidth(contentEl)
+    function isLiveGroupTarget(group, target)
     {
-        if (!contentEl)
+        return Boolean(target && group && (target === group || group.contains(target)));
+    }
+
+    function isLiveGroupActive(group)
+    {
+        const itemEl = group?._timelineItemEl;
+
+        return Boolean(
+            group?.matches(':hover')
+            || (itemEl?.isConnected && itemEl.matches(':hover'))
+        );
+    }
+
+    function removeLiveGroup(group)
+    {
+        if (!group)
             return;
 
-        const match = (contentEl.style.transform || '').match(/translateX\((-?[\d.]+)px\)/);
+        const itemEl = group._timelineItemEl;
 
-        if (match && parseFloat(match[1]) > 0)
-            contentEl.style.width = 'calc(100% - ' + match[1] + 'px)';
+        if (itemEl)
+        {
+            const timers = getLiveTimers(itemEl);
+
+            clearTimeout(timers.show);
+            clearTimeout(timers.hide);
+        }
+
+        group.remove();
     }
 
-    function resetShiftedContentWidth(contentEl)
+    function scheduleLiveGroupRemoval(group)
     {
-        if (contentEl && contentEl.style.width)
-            contentEl.style.width = '';
+        if (!group)
+            return;
+
+        const itemEl = group._timelineItemEl;
+
+        if (!itemEl)
+        {
+            removeLiveGroup(group);
+            return;
+        }
+
+        const timers = getLiveTimers(itemEl);
+
+        clearTimeout(timers.hide);
+
+        timers.hide = setTimeout(function()
+        {
+            if (window.isTimelineLightboxOpen())
+                return;
+
+            if (!isLiveGroupActive(group))
+                removeLiveGroup(group);
+        }, 200);
+    }
+
+    function positionLiveGroup(group, itemEl)
+    {
+        if (!container || !group || !itemEl)
+            return;
+
+        const itemRect = itemEl.closest('.vis-item')?.getBoundingClientRect()
+            || itemEl.getBoundingClientRect();
+        const viewportPadding = 4;
+        const gap = 8;
+        const groupWidth = group.offsetWidth;
+        const groupHeight = group.offsetHeight;
+        const preferredLeft = itemRect.right + gap;
+        const preferredTop = itemRect.top + ((itemRect.height - groupHeight) / 2);
+        const maxLeft = window.innerWidth - groupWidth - viewportPadding;
+        const maxTop = window.innerHeight - groupHeight - viewportPadding;
+
+        group.style.left = Math.max(
+            viewportPadding,
+            Math.min(preferredLeft, maxLeft)
+        ) + 'px';
+        group.style.top = Math.max(
+            viewportPadding,
+            Math.min(preferredTop, maxTop)
+        ) + 'px';
+    }
+
+    function repositionLiveGroups()
+    {
+        document.querySelectorAll(LIVE_GROUP_SELECTOR).forEach(function(group)
+        {
+            if (group._timelineItemEl?.isConnected)
+                positionLiveGroup(group, group._timelineItemEl);
+        });
     }
 
     // Rimuove tutti i gruppi di pulsanti tranne quello passato come eccezione.
@@ -507,7 +591,7 @@
             if (exceptGroup && group === exceptGroup)
                 return;
 
-            group.remove();
+            removeLiveGroup(group);
         });
     }
 
@@ -522,43 +606,47 @@
 
             itemEl.dataset.liveHoverBound = '1';
 
-            itemEl.addEventListener('pointerenter', function(ev)
+            itemEl.addEventListener('pointerenter', function()
             {
                 const timers = getLiveTimers(itemEl);
 
                 clearTimeout(timers.show);
                 clearTimeout(timers.hide);
 
-                const contentEl = getLiveContentEl(itemEl);
-                if (!contentEl) return;
-
-                clampShiftedContentWidth(contentEl);
-
                 if (!itemEl.dataset.itemId) return;
 
                 // Entrando su un item, ripulisce i pulsanti rimasti su altri item.
-                removeAllLiveGroups(contentEl.querySelector(LIVE_GROUP_SELECTOR));
+                const currentGroup = getLiveGroupForItem(itemEl);
+
+                removeAllLiveGroups(currentGroup);
+
+                if (currentGroup)
+                {
+                    clearTimeout(timers.hide);
+                    positionLiveGroup(currentGroup, itemEl);
+                    return;
+                }
 
                 const changeSupplierUrl = itemEl.dataset.changeSupplierUrl || null;
                 const splitUrl = itemEl.dataset.splitUrl || null;
                 const weekendSplitUrl = itemEl.dataset.weekendSplitUrl || null;
-                const rect = contentEl.getBoundingClientRect();
-                const initialOffsetX = ev.clientX - rect.left;
 
                 timers.show = setTimeout(function()
                 {
-                    if (contentEl.querySelector(LIVE_GROUP_SELECTOR)) return;
+                    if (getLiveGroupForItem(itemEl)) return;
 
                     // Se nel frattempo il mouse non è più sull'item, non mostrare nulla.
                     if (!itemEl.matches(':hover')) return;
 
                     const group = document.createElement('div');
                     group.className = 'timeline-live-inline-group';
-                    group.style.position = 'absolute';
-                    group.style.zIndex = '30';
+                    group.style.position = 'fixed';
+                    group.style.zIndex = '10000';
                     group.style.pointerEvents = 'auto';
                     group.style.display = 'flex';
+                    group.style.flexWrap = 'nowrap';
                     group.style.gap = '4px';
+                    group._timelineItemEl = itemEl;
 
                     const linkBtn = document.createElement('button');
                     linkBtn.type = 'button';
@@ -620,54 +708,17 @@
 
                     group.addEventListener('pointerleave', function(e)
                     {
-                        clearTimeout(timers.hide);
-
                         if (e.relatedTarget && itemEl.contains(e.relatedTarget))
                             return;
 
-                        timers.hide = setTimeout(function()
-                        {
-                            if (window.isTimelineLightboxOpen())
-                                return;
-
-                            if (group.matches(':hover') || itemEl.matches(':hover'))
-                                return;
-
-                            if (group.parentNode)
-                                group.remove();
-                        }, 400);
+                        scheduleLiveGroupRemoval(group);
                     });
 
-                    if (getComputedStyle(contentEl).position === 'static')
-                        contentEl.style.position = 'relative';
-
-                    // Appeso invisibile per poterlo misurare davvero: la larghezza
-                    // stimata a mano faceva sbordare il gruppo oltre il bordo destro
-                    // dell'item e, con .vis-item-overflow:hover { overflow: visible },
-                    // la timeline si allungava verso destra.
+                    // Il gruppo viene appeso al body per poter uscire dai pannelli
+                    // overflow-hidden interni di vis-timeline.
                     group.style.visibility = 'hidden';
-                    group.style.left = '0px';
-                    group.style.top = '2px';
-
-                    contentEl.appendChild(group);
-
-                    const contentWidth = contentEl.offsetWidth;
-                    const groupWidth = group.offsetWidth || (28 + (changeSupplierUrl ? 32 : 0) + (splitUrl ? 32 : 0) + (weekendSplitUrl ? 32 : 0));
-
-                    let computedLeft = initialOffsetX + 10;
-
-                    // Non deve mai uscire dal box dell'item.
-                    const maxLeft = Math.max(0, contentWidth - groupWidth - 4);
-
-                    if (computedLeft > maxLeft)
-                        computedLeft = maxLeft;
-
-                    if (computedLeft < 2)
-                        computedLeft = 2;
-
-                    group.style.left = computedLeft + 'px';
-                    group.style.maxWidth = Math.max(0, contentWidth - computedLeft) + 'px';
-                    group.style.overflow = 'hidden';
+                    document.body.appendChild(group);
+                    positionLiveGroup(group, itemEl);
                     group.style.visibility = '';
 
                 }, 250);
@@ -679,34 +730,14 @@
                 // Uscendo dall'item si annulla anche l'eventuale comparsa pendente.
                 clearTimeout(timers.show);
 
-                const contentEl = getLiveContentEl(itemEl);
-                if (!contentEl) return;
+                const group = getLiveGroupForItem(itemEl);
 
-                const group = contentEl.querySelector(LIVE_GROUP_SELECTOR);
-
-                if (group && e.relatedTarget && group.contains(e.relatedTarget))
+                if (group && isLiveGroupTarget(group, e.relatedTarget))
                     return;
-
-                if (!itemEl.matches(':hover'))
-                    resetShiftedContentWidth(contentEl);
 
                 clearTimeout(timers.hide);
 
-                timers.hide = setTimeout(function()
-                {
-                    if (window.isTimelineLightboxOpen())
-                        return;
-
-                    const currentGroup = contentEl.querySelector(LIVE_GROUP_SELECTOR);
-
-                    if (!currentGroup)
-                        return;
-
-                    if (currentGroup.matches(':hover') || itemEl.matches(':hover'))
-                        return;
-
-                    currentGroup.remove();
-                }, 400);
+                scheduleLiveGroupRemoval(group);
             });
         });
     }
@@ -760,23 +791,10 @@
 
                 document.querySelectorAll(LIVE_GROUP_SELECTOR).forEach(function(group)
                 {
-                    const visItem = group.closest('.vis-item');
-
-                    if (group.matches(':hover'))
+                    if (isLiveGroupActive(group))
                         return;
 
-                    if (visItem && visItem.matches(':hover'))
-                        return;
-
-                    group.remove();
-                });
-
-                // Rete di sicurezza: ripristina la larghezza dei contenuti
-                // clampati il cui item non è più in hover (pointerleave perso).
-                document.querySelectorAll('#timelinecontainer .vis-item-content').forEach(function(contentEl)
-                {
-                    if (contentEl.style.width && !contentEl.closest('.vis-item')?.matches(':hover'))
-                        contentEl.style.width = '';
+                    scheduleLiveGroupRemoval(group);
                 });
             });
         }
@@ -795,6 +813,8 @@
         container.addEventListener('pointerleave', sweepOrphanLiveGroups);
         container.addEventListener('wheel', sweepOrphanLiveGroups, { passive: true });
         window.addEventListener('blur', sweepOrphanLiveGroups);
+        window.addEventListener('resize', repositionLiveGroups);
+        document.addEventListener('scroll', repositionLiveGroups, true);
     }
 
     // Delegated handler for group buttons/links rendered by groupTemplate
@@ -993,7 +1013,7 @@ window.getTimelineCreateEndDatetime = function (startDate)
     return new Date(startDate.getTime() + (window.getTimelineVisibleWindowMs() * 0.20));
 };
 
-window.openTimelineCreateRowFormPopup = async function (datetime, groupId)
+window.openTimelineCreateRowFormPopup = async function (datetime, groupId, groupModel)
 {
     const template = document.getElementById('timeline-item-modal-template');
 
@@ -1006,6 +1026,9 @@ window.openTimelineCreateRowFormPopup = async function (datetime, groupId)
 
     if (groupId)
         formUrl.searchParams.set('group_id', groupId);
+
+    if (groupModel)
+        formUrl.searchParams.set('group_model', groupModel);
 
     const response = await fetch(formUrl.toString(), {
         headers: {
@@ -1116,7 +1139,7 @@ window.openTimelineCreateRowFormPopup = async function (datetime, groupId)
     });
 };
 
-window.openTimelineCreateRowPopup = async function (datetime, groupId)
+window.openTimelineCreateRowPopup = async function (datetime, groupId, groupModel)
 {
     if (! CREATE_ROW_FORM_URL)
     {
@@ -1126,7 +1149,7 @@ window.openTimelineCreateRowPopup = async function (datetime, groupId)
         return;
     }
 
-    return window.openTimelineCreateRowFormPopup(datetime, groupId);
+    return window.openTimelineCreateRowFormPopup(datetime, groupId, groupModel);
 };
 
 var options = {
@@ -1307,6 +1330,7 @@ var options = {
             // Allows HTML in group labels (buttons/links). Uses delegated click handler below.
             const wrapper = document.createElement('div');
             wrapper.className = 'timeline-group-label uk-padding-small';
+            wrapper.dataset.groupId = String(group.id);
 
             const title = group.content ?? group.title ?? group.label ?? '';
 
@@ -1332,39 +1356,6 @@ var options = {
                 }).join('');
             }
 
-            // --- Group summary (computed from items) ---
-            const groupItems = items.get().filter(item => item.group === group.id);
-
-            const owners = new Set();
-            let totalSeconds = 0;
-            let firstStart = null;
-            let lastEnd = null;
-            let missingOperatorCount = 0;
-
-            groupItems.forEach(item => {
-                // distinct owner (future-proof: ownerId from backend)
-                owners.add(item.ownerId ?? item.title ?? '__unknown__');
-
-                if (!item.title || item.title === '')
-                    missingOperatorCount++;
-
-                const start = new Date(item.start);
-                const end = new Date(item.end);
-
-                if (!firstStart || start < firstStart)
-                    firstStart = start;
-
-                if (!lastEnd || end > lastEnd)
-                    lastEnd = end;
-
-                totalSeconds += (end - start) / 1000;
-            });
-
-            const totalHours = (totalSeconds / 3600).toFixed(2);
-
-            const formatDate = d =>
-                d ? `${d.toLocaleDateString()} ${d.toLocaleTimeString().slice(0,5)}` : '—';
-
             const modalActionHtml = group.modalUrl ? `
                         <button
                             type="button"
@@ -1382,30 +1373,16 @@ var options = {
 
 					<div class="timeline-group-actions uk-grid-small uk-child-width-auto" uk-grid>
                         ${modalActionHtml}
-                        <button
-                            type="button"
-                            class="uk-button uk-button-default uk-button-small timeline-group-summary-toggle"
-                            uk-toggle="target: #group-summary-${group.id}"
-                            data-group-id="${group.id}"
-                        >
-                            <i class="fa-solid fa-toggle-on"></i>
-                        </button>
 						${actionsHtml}
 					</div>
 				</div>
-
-                <div
-                    id="group-summary-${group.id}"
-                    class="timeline-group-summary uk-text-small uk-text-muted"
-                    hidden
-                >
-                    <div><strong>Operators:</strong> ${owners.size}</div>
-                    <div><strong>Total time:</strong> ${totalHours} h</div>
-                    <div><strong>From:</strong> ${formatDate(firstStart)}</div>
-                    <div><strong>To:</strong> ${formatDate(lastEnd)}</div>
-                    <div><strong>Missing operator:</strong> ${missingOperatorCount}</div>
-                </div>
 `;
+
+            const groupTitleElement = wrapper.querySelector('.timeline-group-title');
+            const hiddenNestedGroupsBadge = createTimelineHiddenNestedGroupsBadge(group.id);
+
+            if (groupTitleElement && hiddenNestedGroupsBadge)
+                groupTitleElement.appendChild(hiddenNestedGroupsBadge);
 
             const modalBtn = wrapper.querySelector('.timeline-group-modal-trigger');
 
@@ -1414,21 +1391,6 @@ var options = {
                 modalBtn.addEventListener('click', function (event) {
                     event.stopPropagation();
                     window.openTimelineGroupModal(modalBtn);
-                });
-            }
-
-            // Recalculate group height after UIkit toggle animation
-            const toggleBtn = wrapper.querySelector('.timeline-group-summary-toggle');
-
-            if (toggleBtn)
-            {
-                toggleBtn.addEventListener('click', function () {
-                    // UIkit default toggle animation ~200ms
-                    setTimeout(function () {
-                        if (window.timeline && typeof window.timeline.redraw === 'function') {
-                            window.timeline.redraw();
-                        }
-                    }, 220);
                 });
             }
 
@@ -1559,7 +1521,7 @@ var options = {
 
     window.addEventListener('resize', scheduleTimelineGroupsFilterWidthSync);
 
-    function getHiddenGroupIds()
+    function getStoredHiddenGroupIds()
     {
         try
         {
@@ -1573,11 +1535,26 @@ var options = {
         }
     }
 
+    function getHiddenGroupIds()
+    {
+        const hiddenIds = getStoredHiddenGroupIds();
+
+        timelineAutomaticallyHiddenGroupIds.forEach(function (groupId)
+        {
+            hiddenIds.add(String(groupId));
+        });
+
+        return hiddenIds;
+    }
+
     function storeHiddenGroupIds(hiddenIds)
     {
         try
         {
-            window.localStorage.setItem(TIMELINE_HIDDEN_GROUPS_STORAGE_KEY, JSON.stringify(Array.from(hiddenIds)));
+            window.localStorage.setItem(
+                TIMELINE_HIDDEN_GROUPS_STORAGE_KEY,
+                JSON.stringify(Array.from(hiddenIds).map(String))
+            );
         }
         catch (error)
         {
@@ -1595,33 +1572,295 @@ var options = {
         return (template.content.textContent || String(group.id)).trim() || String(group.id);
     }
 
+    function getTimelineGroupById(groupId, timelineGroups = groups.get())
+    {
+        return timelineGroups.find(function (group)
+        {
+            return String(group.id) === String(groupId);
+        }) ?? null;
+    }
+
+    function getTimelineNestedGroupIds(groupId, timelineGroups = groups.get(), visited = new Set())
+    {
+        const groupKey = String(groupId);
+
+        if (visited.has(groupKey))
+            return [];
+
+        visited.add(groupKey);
+
+        const group = getTimelineGroupById(groupId, timelineGroups);
+        const directNestedGroupIds = Array.isArray(group?.nestedGroups) ? group.nestedGroups : [];
+
+        return directNestedGroupIds.flatMap(function (nestedGroupId)
+        {
+            return [nestedGroupId].concat(
+                getTimelineNestedGroupIds(nestedGroupId, timelineGroups, visited)
+            );
+        });
+    }
+
+    function getTimelineTopLevelGroups(timelineGroups = groups.get())
+    {
+        const nestedGroupIds = new Set(
+            timelineGroups.flatMap(function (group)
+            {
+                return Array.isArray(group.nestedGroups)
+                    ? group.nestedGroups.map(String)
+                    : [];
+            })
+        );
+
+        return timelineGroups.filter(function (group)
+        {
+            return ! nestedGroupIds.has(String(group.id));
+        });
+    }
+
+    function getTimelineGroupsWithItems(timelineGroups, timelineItems)
+    {
+        const groupsWithItems = new Set(
+            timelineItems
+                .filter(function (item)
+                {
+                    return item
+                        && item.type !== 'background'
+                        && item.group !== undefined
+                        && item.group !== null;
+                })
+                .map(function (item)
+                {
+                    return String(item.group);
+                })
+        );
+
+        let changed = true;
+
+        while (changed)
+        {
+            changed = false;
+
+            timelineGroups.forEach(function (group)
+            {
+                const nestedGroupIds = Array.isArray(group.nestedGroups)
+                    ? group.nestedGroups
+                    : [];
+
+                if (groupsWithItems.has(String(group.id)) || ! nestedGroupIds.some(function (nestedGroupId)
+                {
+                    return groupsWithItems.has(String(nestedGroupId));
+                }))
+                    return;
+
+                groupsWithItems.add(String(group.id));
+                changed = true;
+            });
+        }
+
+        return groupsWithItems;
+    }
+
+    function getTimelineAutomaticallyHiddenGroupIds(timelineGroups, timelineItems)
+    {
+        const groupsWithItems = getTimelineGroupsWithItems(timelineGroups, timelineItems);
+
+        return new Set(
+            timelineGroups
+                .filter(function (group)
+                {
+                    return ! groupsWithItems.has(String(group.id));
+                })
+                .map(function (group)
+                {
+                    return String(group.id);
+                })
+        );
+    }
+
+    function normalizeTimelineHiddenGroupIds(hiddenIds, timelineGroups = groups.get())
+    {
+        const normalizedHiddenIds = new Set(hiddenIds);
+
+        Array.from(normalizedHiddenIds).forEach(function (groupId)
+        {
+            getTimelineNestedGroupIds(groupId, timelineGroups).forEach(function (nestedGroupId)
+            {
+                normalizedHiddenIds.add(String(nestedGroupId));
+            });
+        });
+
+        return normalizedHiddenIds;
+    }
+
+    function getTimelineGroupsFilterTree()
+    {
+        const timelineGroups = groups.get();
+        const timelineGroupOrder = new Map(
+            timelineGroups.map(function (group, index)
+            {
+                return [String(group.id), index];
+            })
+        );
+
+        const sortGroupsByTimelineOrder = function (firstGroup, secondGroup)
+        {
+            return timelineGroupOrder.get(String(firstGroup.id))
+                - timelineGroupOrder.get(String(secondGroup.id));
+        };
+
+        const createNode = function (group, visited = new Set())
+        {
+            const groupKey = String(group.id);
+
+            if (visited.has(groupKey))
+                return null;
+
+            const nestedVisited = new Set(visited);
+            nestedVisited.add(groupKey);
+
+            const children = (Array.isArray(group.nestedGroups) ? group.nestedGroups : [])
+                .map(function (nestedGroupId)
+                {
+                    const nestedGroup = getTimelineGroupById(nestedGroupId, timelineGroups);
+
+                    return nestedGroup ? createNode(nestedGroup, nestedVisited) : null;
+                })
+                .filter(Boolean)
+                .sort(function (firstNode, secondNode)
+                {
+                    return sortGroupsByTimelineOrder(firstNode.group, secondNode.group);
+                });
+
+            return {group: group, children: children};
+        };
+
+        return getTimelineTopLevelGroups(timelineGroups)
+            .sort(sortGroupsByTimelineOrder)
+            .map(function (group)
+            {
+                return createNode(group);
+            })
+            .filter(Boolean);
+    }
+
+    function getTimelineGroupsFilterOpenIds()
+    {
+        return new Set(
+            Array.from(document.querySelectorAll('#timeline-groups-filter-list li.uk-open[data-group-id]'))
+                .map(function (element)
+                {
+                    return element.dataset.groupId;
+                })
+        );
+    }
+
     function updateTimelineGroupsFilterBadge()
     {
         const badge = document.getElementById('timeline-groups-filter-badge');
         if (! badge)
             return;
 
-        const knownIds = new Set(groups.getIds().map(String));
-        const hiddenCount = Array.from(getHiddenGroupIds()).filter(id => knownIds.has(id)).length;
+        const hiddenIds = normalizeTimelineHiddenGroupIds(getHiddenGroupIds());
+        const hiddenCount = getTimelineTopLevelGroups().filter(function (group)
+        {
+            return hiddenIds.has(String(group.id));
+        }).length;
 
-        badge.textContent = hiddenCount;
+        setTimelineHiddenCountBadgeContent(badge, hiddenCount);
         badge.hidden = hiddenCount === 0;
     }
 
-    function setTimelineGroupVisibility(groupId, visible)
+    function setTimelineHiddenCountBadgeContent(badge, count)
     {
-        const hiddenIds = getHiddenGroupIds();
+        badge.replaceChildren();
 
-        if (visible)
-            hiddenIds.delete(String(groupId));
+        const icon = document.createElement('i');
+        icon.className = 'fa fa-eye-slash';
+        icon.setAttribute('aria-hidden', 'true');
+
+        badge.appendChild(icon);
+        badge.appendChild(document.createTextNode(' ' + String(count)));
+    }
+
+    function createTimelineHiddenNestedGroupsBadge(groupId)
+    {
+        const hiddenIds = normalizeTimelineHiddenGroupIds(getHiddenGroupIds());
+        const hiddenNestedGroupsCount = getTimelineNestedGroupIds(groupId)
+            .filter(function (nestedGroupId)
+            {
+                return hiddenIds.has(String(nestedGroupId));
+            }).length;
+
+        if (hiddenNestedGroupsCount === 0)
+            return null;
+
+        const badge = document.createElement('span');
+        badge.className = 'uk-badge uk-margin-small-left timeline-groups-hidden-nested-badge';
+        setTimelineHiddenCountBadgeContent(badge, hiddenNestedGroupsCount);
+        badge.title = 'Nested groups nascosti';
+
+        return badge;
+    }
+
+    function refreshTimelineHiddenNestedGroupsBadges()
+    {
+        document.querySelectorAll('#timelinecontainer .timeline-group-label[data-group-id]')
+            .forEach(function (groupLabel)
+            {
+                const groupTitleElement = groupLabel.querySelector('.timeline-group-title');
+
+                if (! groupTitleElement)
+                    return;
+
+                groupTitleElement.querySelectorAll('.timeline-groups-hidden-nested-badge')
+                    .forEach(function (badge)
+                    {
+                        badge.remove();
+                    });
+
+                const badge = createTimelineHiddenNestedGroupsBadge(groupLabel.dataset.groupId);
+
+                if (badge)
+                    groupTitleElement.appendChild(badge);
+            });
+    }
+
+    function scheduleTimelineHiddenNestedGroupsBadgesRefresh()
+    {
+        if (typeof window.requestAnimationFrame === 'function')
+            window.requestAnimationFrame(refreshTimelineHiddenNestedGroupsBadges);
         else
-            hiddenIds.add(String(groupId));
+            setTimeout(refreshTimelineHiddenNestedGroupsBadges, 0);
+    }
+
+    function setTimelineGroupVisibility(groupId, visible, includeNestedGroups = false)
+    {
+        const groupIds = [groupId];
+
+        if (includeNestedGroups)
+            groupIds.push(...getTimelineNestedGroupIds(groupId));
+
+        const hiddenIds = normalizeTimelineHiddenGroupIds(getStoredHiddenGroupIds());
+
+        groupIds.forEach(function (id)
+        {
+            timelineAutomaticallyHiddenGroupIds.delete(String(id));
+
+            if (visible)
+                hiddenIds.delete(String(id));
+            else
+                hiddenIds.add(String(id));
+        });
 
         storeHiddenGroupIds(hiddenIds);
 
-        groups.update({id: groupId, visible: visible});
+        groups.update(groupIds.map(function (id)
+        {
+            return {id: id, visible: visible};
+        }));
 
-        updateTimelineGroupsFilterBadge();
+        renderTimelineGroupsFilterList();
+        scheduleTimelineHiddenNestedGroupsBadgesRefresh();
     }
 
     function renderTimelineGroupsFilterList()
@@ -1630,42 +1869,129 @@ var options = {
         if (! listEl)
             return;
 
-        const hiddenIds = getHiddenGroupIds();
-
-        const sortedGroups = groups.get().slice().sort(function (a, b)
-        {
-            return getTimelineGroupPlainLabel(a).localeCompare(getTimelineGroupPlainLabel(b), 'it', {sensitivity: 'base'});
-        });
+        const hiddenIds = normalizeTimelineHiddenGroupIds(getHiddenGroupIds());
+        const openGroupIds = getTimelineGroupsFilterOpenIds();
 
         listEl.innerHTML = '';
 
-        sortedGroups.forEach(function (group)
+        const createCheckbox = function (group, parentVisible = true)
+        {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'uk-checkbox uk-margin-small-right timeline-groups-filter-checkbox';
+            checkbox.checked = parentVisible && ! hiddenIds.has(String(group.id));
+            checkbox.disabled = ! parentVisible;
+            checkbox.dataset.groupId = String(group.id);
+
+            const nestedGroupIds = getTimelineNestedGroupIds(group.id);
+            const visibleNestedGroupsCount = nestedGroupIds.filter(function (nestedGroupId)
+            {
+                return ! hiddenIds.has(String(nestedGroupId));
+            }).length;
+
+            checkbox.indeterminate = checkbox.checked
+                && nestedGroupIds.length > 0
+                && visibleNestedGroupsCount !== nestedGroupIds.length;
+
+            checkbox.addEventListener('click', function (event)
+            {
+                event.stopPropagation();
+            });
+
+            checkbox.addEventListener('change', function ()
+            {
+                setTimelineGroupVisibility(group.id, checkbox.checked, nestedGroupIds.length > 0);
+            });
+
+            return checkbox;
+        };
+
+        const createGroupLine = function (group, parentVisible = true, indented = false)
         {
             const label = document.createElement('label');
             label.className = 'uk-display-block uk-margin-small-bottom';
 
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'uk-checkbox uk-margin-small-right timeline-groups-filter-checkbox';
-            checkbox.checked = ! hiddenIds.has(String(group.id));
-            checkbox.dataset.groupId = String(group.id);
+            if (indented)
+                label.classList.add('uk-margin-small-left');
 
-            checkbox.addEventListener('change', function ()
-            {
-                setTimelineGroupVisibility(group.id, checkbox.checked);
-            });
+            const checkbox = createCheckbox(group, parentVisible);
 
             label.appendChild(checkbox);
             label.appendChild(document.createTextNode(getTimelineGroupPlainLabel(group)));
 
-            listEl.appendChild(label);
+            return label;
+        };
+
+        const accordion = document.createElement('ul');
+        accordion.className = 'uk-accordion';
+        accordion.setAttribute('uk-accordion', 'multiple: true');
+
+        const appendNode = function (node, targetAccordion, parentVisible = true, nested = false)
+        {
+            const group = node.group;
+            const visible = parentVisible && ! hiddenIds.has(String(group.id));
+
+            if (node.children.length === 0)
+            {
+                const item = document.createElement('li');
+                item.appendChild(createGroupLine(group, parentVisible, nested));
+                targetAccordion.appendChild(item);
+
+                return;
+            }
+
+            const item = document.createElement('li');
+            item.dataset.groupId = String(group.id);
+
+            if (openGroupIds.has(String(group.id)))
+                item.classList.add('uk-open');
+
+            const title = document.createElement('a');
+            title.href = '#';
+            title.className = 'uk-accordion-title uk-flex uk-flex-middle uk-margin-small-bottom';
+
+            if (nested)
+                title.classList.add('uk-margin-small-left');
+
+            title.appendChild(createCheckbox(group, parentVisible));
+            title.appendChild(document.createTextNode(getTimelineGroupPlainLabel(group)));
+
+            const content = document.createElement('div');
+            content.className = 'uk-accordion-content uk-margin-small-top uk-margin-small-left';
+
+            const nestedAccordion = document.createElement('ul');
+            nestedAccordion.className = 'uk-accordion';
+            nestedAccordion.setAttribute('uk-accordion', 'multiple: true');
+
+            node.children.forEach(function (childNode)
+            {
+                appendNode(childNode, nestedAccordion, visible, true);
+            });
+
+            content.appendChild(nestedAccordion);
+            item.appendChild(title);
+            item.appendChild(content);
+            targetAccordion.appendChild(item);
+        };
+
+        getTimelineGroupsFilterTree().forEach(function (node)
+        {
+            appendNode(node, accordion);
         });
+
+        listEl.appendChild(accordion);
+
+        if (typeof UIkit !== 'undefined' && typeof UIkit.update === 'function')
+            UIkit.update(listEl);
 
         updateTimelineGroupsFilterBadge();
     }
 
     function setAllTimelineGroupsVisibility(visible)
     {
+        if (visible)
+            timelineAutomaticallyHiddenGroupIds.clear();
+
         const hiddenIds = visible ? new Set() : new Set(groups.getIds().map(String));
 
         storeHiddenGroupIds(hiddenIds);
@@ -1687,10 +2013,39 @@ var options = {
     window.setTimelineData = function (data)
     {
         const currentWindow = timeline ? timeline.getWindow() : null;
+        const timelineGroups = Array.isArray(data.groups) ? data.groups : groups.get();
+        const timelineItems = Array.isArray(data.items) ? data.items : items.get();
+        const currentlyEmptyGroupIds = getTimelineAutomaticallyHiddenGroupIds(
+            timelineGroups,
+            timelineItems
+        );
+
+        if (! timeline)
+        {
+            timelineAutomaticallyHiddenGroupIds = currentlyEmptyGroupIds;
+        }
+        else
+        {
+            timelineAutomaticallyHiddenGroupIds = new Set(
+                Array.from(timelineAutomaticallyHiddenGroupIds).filter(function (groupId)
+                {
+                    return currentlyEmptyGroupIds.has(groupId);
+                })
+            );
+        }
 
         if (data.groups)
         {
-            const hiddenGroupIds = getHiddenGroupIds();
+            const hiddenGroupIds = normalizeTimelineHiddenGroupIds(
+                getHiddenGroupIds(),
+                data.groups
+            );
+            const persistedHiddenGroupIds = normalizeTimelineHiddenGroupIds(
+                getStoredHiddenGroupIds(),
+                data.groups
+            );
+
+            storeHiddenGroupIds(persistedHiddenGroupIds);
 
             data.groups.forEach(function (group)
             {
@@ -1702,6 +2057,7 @@ var options = {
 
             renderTimelineGroupsFilterList();
             scheduleTimelineGroupsFilterWidthSync();
+            scheduleTimelineHiddenNestedGroupsBadgesRefresh();
         }
 
         if (data.items)
@@ -1762,7 +2118,13 @@ var options = {
                 if (!properties || !properties.time)
                     return;
 
-                await window.openTimelineCreateRowPopup(new Date(properties.time), properties.group);
+                const group = properties.group ? groups.get(properties.group) : null;
+
+                await window.openTimelineCreateRowPopup(
+                    new Date(properties.time),
+                    properties.group,
+                    group?.model
+                );
             });
 
             addWeekendBackgrounds(timeline, items);
