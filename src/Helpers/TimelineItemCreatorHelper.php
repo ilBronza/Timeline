@@ -39,6 +39,8 @@ class TimelineItemCreatorHelper
 
 		$item->popupTitle = $model->getTimelineItemPopuptitle($groupModel);
 
+		$item->updateUrl = $model->getTimelineItemUpdateUrl($groupModel);
+
 		if(method_exists($model, 'getTimelineItemDeleteUrl'))
 			$item->deleteUrl = $model->getTimelineItemDeleteUrl($groupModel);
 

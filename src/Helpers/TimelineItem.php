@@ -7,12 +7,12 @@ use Carbon\Carbon;
 class TimelineItem
 {
 	public string $id;
-	public ? string $group;
+	public ? string $group = null;
 	public string $title;
 	public string $itemType;
 	public string $style;
 	public string $popupTitle;
-	public ?string $updateUrl;
+	public ?string $updateUrl = null;
 	public ?string $deleteUrl = null;
 	public ?string $modalUrl = null;
 	public ? string $description;

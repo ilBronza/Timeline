@@ -1400,7 +1400,7 @@ var options = {
         // Enable time edits and fire when end is resized
         editable: {
             add: false,
-			updateTime: true,
+			updateTime: Boolean(UPDATE_URL),
 			updateGroup: false,
 			remove: false
 		},
