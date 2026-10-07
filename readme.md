@@ -216,6 +216,12 @@ View changes:
 
 After migrating, the `Timeline` folders in `ilbronza/crud` (`src/Traits/Timeline`, `src/Http/Controllers/Timeline`, `src/Helpers/TimelineHelpers`, `src/Interfaces/TimelineInterfaces`, `src/Interfaces/GanttTimelineInterface.php`, `resources/views/timeline`) can be removed.
 
+## Tests
+
+Run `composer test:all` for the PHP and JavaScript suites, or `composer test`
+and `composer test:js` separately. See [tests/README.md](tests/README.md) for
+the shared IlBronza test environment, focused runs, and coverage boundaries.
+
 ## License
 
 MIT
