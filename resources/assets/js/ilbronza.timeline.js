@@ -1103,34 +1103,71 @@ window.openTimelineCreateRowFormPopup = async function (datetime, groupId, group
         if (saveButton)
             saveButton.disabled = true;
 
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-        };
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        try
+        {
+            const headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            };
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-        if (csrfToken)
-            headers['X-CSRF-TOKEN'] = csrfToken;
+            if (csrfToken)
+                headers['X-CSRF-TOKEN'] = csrfToken;
 
-        const saveResponse = await fetch(form.getAttribute('action'), {
-            method: form.getAttribute('method') || 'POST',
-            headers: headers,
-            body: JSON.stringify(payload),
-        });
+            const saveResponse = await fetch(form.getAttribute('action'), {
+                method: form.getAttribute('method') || 'POST',
+                headers: headers,
+                body: JSON.stringify(payload),
+            });
 
-        const data = await saveResponse.json();
+            const responseText = await saveResponse.text();
+            let data = null;
 
-        if (!saveResponse.ok || data.success !== true)
-            throw new Error(data.message || ('HTTP ' + saveResponse.status));
+            try
+            {
+                data = JSON.parse(responseText);
+            }
+            catch (error)
+            {
+                // Preserve the response body when the server does not return JSON.
+            }
 
-        if (typeof window.addSuccessNotification === 'function')
-            window.addSuccessNotification(data.message || 'Riga creata');
+            if (!saveResponse.ok || data?.success !== true)
+            {
+                const messages = [data?.message];
 
-        modal.hide();
-        await window.fetchTimeline();
+                if (data?.errors && typeof data.errors === 'object')
+                    messages.push(...Object.values(data.errors).flat());
 
-        if (saveButton)
-            saveButton.disabled = false;
+                const message = [...new Set(messages.filter(function (value)
+                {
+                    return typeof value === 'string' && value.trim();
+                }))].join('\n');
+
+                throw new Error(message || responseText.trim() || ('HTTP ' + saveResponse.status));
+            }
+
+            if (typeof window.addSuccessNotification === 'function')
+                window.addSuccessNotification(data.message || 'Riga creata');
+
+            modal.hide();
+            await window.fetchTimeline();
+        }
+        catch (error)
+        {
+            if (typeof window.addDangerNotification === 'function')
+            {
+                // UKN renders HTML: escape server messages before displaying them.
+                const message = document.createElement('div');
+                message.textContent = error.message || 'Errore durante il salvataggio';
+                window.addDangerNotification(message.innerHTML.replace(/\r?\n/g, '<br>'));
+            }
+        }
+        finally
+        {
+            if (saveButton)
+                saveButton.disabled = false;
+        }
     });
 
     clone.addEventListener('hidden', function () {
